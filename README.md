@@ -1,0 +1,130 @@
+# Old Days ☕ — ระบบหลังบ้านร้านกาแฟ
+
+ระบบสำหรับร้านกาแฟ Old Days: ปิดยอดรายวัน + ค่าคอมเครื่องดื่ม + สต๊อกวัตถุดิบ + เบิกซื้อ + เมนู
+ข้อมูลทั้งหมดเก็บใน **Google Sheets** และส่งสรุปยอดรายวันเป็น **infographic (Flex Message)**
+เข้ากลุ่ม LINE "Old Days" ผ่านบอทเลขาอัตโนมัติ
+
+## ส่วนประกอบ
+
+| ไฟล์ | คืออะไร |
+|---|---|
+| `index.html` | LIFF app (หน้าจอที่พนักงาน/ผู้บริหาร/เจ้าของใช้) |
+| `gas/Code.gs` | Backend บน Google Apps Script ผูกกับ Google Sheets |
+
+## สิทธิ์ผู้ใช้
+
+- **เจ้าของ (owner)** — ทุกอย่าง: ตั้งค่า, ดูค่าคอมทุกคน, แก้เมนู, อนุมัติเบิกซื้อ
+- **ผู้บริหาร (manager)** — อนุมัติเบิกซื้อ, แก้เมนู, ดูรายงาน+ค่าคอมทุกคน, แก้ยอดย้อนหลัง
+- **บาริสต้า (barista)** — ปิดยอดรายวัน, จัดการสต๊อก, ขอเบิกซื้อ, ดูค่าคอมของตัวเอง
+
+> คนแรกที่ลงทะเบียนในแอปจะเป็น owner อัตโนมัติ คนถัดไปเป็น barista
+> เปลี่ยนสิทธิ์ใครก็ได้โดยแก้คอลัมน์ `Role` ในแท็บ `Staff` ของ Sheet (owner / manager / barista)
+
+## ค่าคอมมิชชั่น
+
+- เครื่องดื่ม **แก้วละ 3 บาท** — นับเฉพาะหมวดที่ `Count_Commission = TRUE`
+  (Signature, Coffee, Premium Coffee, Non Coffee, Matcha, Soft Cream, Dirty, Soda)
+- **ไม่นับ**: Beer, Bakery, เมล็ดกาแฟ, Gummy berries
+- แบ่งเท่ากันตามพนักงานที่ถูกเลือกว่า "เข้ากะ" ในฟอร์มปิดยอด
+- แก้เรตได้ที่แท็บ `Config` → `COMMISSION_PER_CUP`
+- ยอดต่อคนต่อเดือนดูได้ในแอป (แท็บเพิ่มเติม → รายงาน) หรือแท็บ `Commission` ใน Sheet
+
+---
+
+# วิธีติดตั้ง (ทำครั้งเดียว ~20 นาที)
+
+## 1) สร้าง Google Sheet + Apps Script
+
+1. สร้าง Google Sheets เปล่าใหม่ ตั้งชื่อ เช่น `Old Days ระบบร้าน`
+2. เมนู **Extensions → Apps Script**
+3. ลบโค้ดเดิม แล้ววางเนื้อหาจาก `gas/Code.gs` ทั้งไฟล์ → Save
+4. กด **Deploy → New deployment → Web app**
+   - Execute as: **Me**
+   - Who has access: **Anyone**
+5. คัดลอก **Web app URL** (ลงท้าย `/exec`) เก็บไว้
+
+> แท็บทั้งหมด (Staff, Categories, DailyClose, Commission, Ingredients, Purchases ฯลฯ)
+> จะถูกสร้าง + ใส่ข้อมูลตั้งต้นให้อัตโนมัติตอนมีการเรียกใช้ครั้งแรก
+> หมวดสินค้า/เมนูพรีเมียมตั้งต้นตรงกับรายงานที่ร้านใช้อยู่ แก้เพิ่ม/ลดได้ในแท็บ `Categories` และ `PremiumItems`
+
+## 2) สร้าง LIFF app
+
+1. เข้า [LINE Developers Console](https://developers.line.biz/console/) → Provider เดิมที่มีอยู่
+2. สร้างหรือใช้ **LINE Login channel** → แท็บ LIFF → **Add**
+   - Size: **Full**
+   - Endpoint URL: URL ของ `index.html` ที่ deploy (เช่น GitHub Pages:
+     `https://<user>.github.io/lakon-liff/olddays/`)
+3. คัดลอก **LIFF ID**
+
+## 3) แก้ config ใน `index.html`
+
+```js
+const LIFF_ID = "xxxx-xxxxxxxx";          // จากข้อ 2
+const GAS_URL = "https://script.google.com/macros/s/xxxx/exec"; // จากข้อ 1
+```
+
+## 4) ตั้งค่าบอทเลขาส่งสรุปเข้ากลุ่ม (ใช้บอท "เลขาคุณปาล์ม" ที่มีอยู่ได้)
+
+ต้องใช้ **Messaging API channel** (บอทที่อยู่ในกลุ่ม Old Days อยู่แล้ว):
+
+1. **Channel access token**: LINE Developers Console → channel ของบอท →
+   แท็บ Messaging API → **Channel access token (long-lived)** → Issue/คัดลอก
+2. ใส่ token ใน Apps Script: **Project Settings → Script Properties → Add**
+   - Property: `LINE_CHANNEL_ACCESS_TOKEN`
+   - Value: token ที่คัดลอกมา
+3. **หา groupId ของกลุ่ม Old Days** (ทำครั้งเดียว):
+   - เปิด webhook ของบอทชั่วคราว (Messaging API → Webhook URL ใส่ URL อะไรก็ได้ที่ log ได้
+     เช่น webhook.site) → เปิด Use webhook
+   - พิมพ์ข้อความอะไรก็ได้ในกลุ่ม Old Days → ดู log จะเห็น `"source":{"groupId":"Cxxxx..."}`
+   - คัดลอก `Cxxxx...` มาใส่ในแท็บ `Config` ของ Sheet → แถว `LINE_GROUP_ID`
+   - ปิด webhook กลับได้เลย
+4. ทดสอบ: ปิดยอด 1 ครั้งในแอป หรือใช้ "ส่งสรุปซ้ำ" ในแท็บเพิ่มเติม
+   → บอทจะส่งการ์ด infographic เข้ากลุ่ม
+
+ถ้ายังไม่ตั้งค่า ระบบก็ใช้ได้ปกติ (บันทึกลง Sheet) แค่ไม่ส่งเข้ากลุ่มอัตโนมัติ
+
+## 5) เชิญพนักงาน
+
+ส่งลิงก์ LIFF (`https://liff.line.me/<LIFF_ID>`) เข้ากลุ่ม —
+ทุกคนกดเปิด ลงทะเบียนชื่อครั้งแรกครั้งเดียว
+
+> ⚠️ **คนแรกที่เปิดต้องเป็นคุณ (เจ้าของ)** เพราะคนแรกได้สิทธิ์ owner อัตโนมัติ
+
+---
+
+# การใช้งานประจำวัน
+
+**บาริสต้า (สิ้นวัน ~2 นาที):**
+1. เปิดแอป → แท็บ 🧾 ปิดยอด
+2. กรอกตามสลิปสรุป POS + แอปถุงเงิน (ระบบเช็คให้ว่า เงินสด+ไทยช่วยไทย+โอน ตรงกับยอดขายไหม)
+3. กดจำนวนแก้วต่อหมวด + เมนูพรีเมียม
+4. เลือกคนเข้ากะ → เห็นค่าคอมทันที → กดปิดยอด
+5. บอทเลขาส่ง infographic เข้ากลุ่มให้อัตโนมัติ
+
+**สต๊อก:** รับของเข้า/ตัดออก/นับสต๊อกได้จากแท็บ 📦 ระบบเตือนในหน้าแรกเมื่อของใกล้หมด
+
+**เบิกซื้อ:** พนักงานส่งคำขอ → ผู้บริหารเห็นในหน้าแรก กดอนุมัติ → คนซื้อบันทึกยอดจริง
+(กลายเป็นข้อมูลรายจ่ายในแท็บ `Purchases` พร้อมเอาไปทำบัญชี)
+
+# ดูข้อมูลใน Google Sheets
+
+| แท็บ | ข้อมูล |
+|---|---|
+| `DailyClose` | ยอดปิดรายวัน (1 แถว/วัน) |
+| `SalesByCategory` | จำนวนขายแยกหมวด/รายการ แบบแถวยาว — เหมาะทำ Pivot Table |
+| `Commission` | ค่าคอมรายคนรายวัน |
+| `Ingredients` / `StockMoves` | สต๊อกปัจจุบัน / ประวัติเข้าออก |
+| `Purchases` | รายจ่ายเบิกซื้อทั้งหมด |
+| `Config` | ชื่อร้าน, เรตค่าคอม, LINE_GROUP_ID |
+
+# หมายเหตุด้านความปลอดภัย
+
+- ระบบยืนยันตัวตนด้วย LINE userId ผ่าน LIFF เหมาะกับใช้ภายในทีมร้าน
+  อย่าแชร์ URL ของ GAS Web App ให้คนนอก
+- Channel access token เก็บใน Script Properties เท่านั้น ห้าม commit ลงโค้ด
+
+# แผนเฟสถัดไป
+
+- ผูกสูตรเมนู → ตัดสต๊อกอัตโนมัติจากยอดขาย
+- งบกำไรขาดทุนรายเดือน (รายรับจาก DailyClose − รายจ่ายจาก Purchases)
+- เช็คสลิปเงินโอนอัตโนมัติ (SlipOK/EasySlip)
