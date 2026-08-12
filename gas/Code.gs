@@ -98,13 +98,15 @@ function doPost(e) {
   return handleRequest(e);
 }
 
+// action ที่แก้ข้อมูล ต้องเข้าคิวทีละคน — ส่วน read ปล่อยขนานได้
+// ไม่งั้นหน้า dashboard (ยิง 4 read พร้อมกัน) จะไปต่อคิวกันเองจนช้า
+var WRITE_ACTIONS = {
+  registerStaff: 1, submitDailyClose: 1, stockMove: 1, addIngredient: 1,
+  createPurchase: 1, updatePurchase: 1, saveMenuItem: 1,
+};
+
 function handleRequest(e) {
-  var lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(20000);
-  } catch (err) {
-    return jsonOut({ ok: false, error: 'ระบบกำลังยุ่ง กรุณาลองใหม่' });
-  }
+  var lock = null;
   try {
     var params = (e && e.parameter) || {};
     var body = {};
@@ -118,12 +120,22 @@ function handleRequest(e) {
 
     ensureSetup();
 
+    if (WRITE_ACTIONS[action]) {
+      lock = LockService.getScriptLock();
+      try {
+        lock.waitLock(20000);
+      } catch (lockErr) {
+        lock = null;
+        throw new Error('ระบบกำลังยุ่ง กรุณาลองใหม่');
+      }
+    }
+
     var result = route(action, req);
     return jsonOut(Object.assign({ ok: true }, result));
   } catch (err) {
     return jsonOut({ ok: false, error: String(err && err.message || err) });
   } finally {
-    lock.releaseLock();
+    if (lock) lock.releaseLock();
   }
 }
 
@@ -327,11 +339,27 @@ function actionBootstrap(req) {
 function actionRegisterStaff(req) {
   if (!req.lineUserId) throw new Error('ไม่พบ LINE user id');
   if (!req.name) throw new Error('กรุณากรอกชื่อ');
-  var existing = findStaff(req.lineUserId);
-  if (existing) return { staff: existing };
+  var all = readRows(SHEET_TABS.STAFF);
+
+  // เคยมีบัญชีอยู่แล้ว (รวมที่ถูกปิดใช้งาน) — ห้ามสมัครซ้ำเพื่อชุบตัวเอง
+  for (var i = 0; i < all.length; i++) {
+    if (all[i].LINE_User_ID === req.lineUserId) {
+      if (isTrue(all[i].Active)) return { staff: all[i] };
+      throw new Error('บัญชีนี้ถูกปิดการใช้งาน ติดต่อเจ้าของร้าน');
+    }
+  }
+
+  // ชื่อใช้เป็นตัวระบุค่าคอม/สิทธิ์แก้ยอด — ห้ามซ้ำเด็ดขาด
+  var newName = String(req.name).trim();
+  for (var j = 0; j < all.length; j++) {
+    if (String(all[j].Name).trim().toLowerCase() === newName.toLowerCase()) {
+      throw new Error('มีชื่อ "' + newName + '" อยู่แล้ว กรุณาใช้ชื่อที่ไม่ซ้ำ');
+    }
+  }
+  req.name = newName;
 
   // คนแรกที่ลงทะเบียน = เจ้าของร้าน คนถัดไป = บาริสต้า (เจ้าของแก้ role ได้ในแท็บ Staff)
-  var isFirst = readRows(SHEET_TABS.STAFF).length === 0;
+  var isFirst = all.length === 0;
   var staff = {
     LINE_User_ID: req.lineUserId,
     Name: req.name,
@@ -573,6 +601,10 @@ function actionStockMove(req) {
   if (!ing) throw new Error('ไม่พบวัตถุดิบ');
 
   var current = num(ing.Current_Stock);
+  if (type === 'out' && qty > current) {
+    throw new Error('ตัดออก ' + qty + ' ไม่ได้ — คงเหลือแค่ ' + current + ' ' + ing.Unit +
+      ' (ถ้าของจริงไม่ตรง ใช้ "นับสต๊อก" แทน)');
+  }
   var balance;
   if (type === 'in') balance = current + qty;
   else if (type === 'out') balance = current - qty;
@@ -604,7 +636,12 @@ function actionStockMove(req) {
 
 function actionGetPurchases(req) {
   requireStaff(req);
-  return { purchases: readRows(SHEET_TABS.PURCHASES).slice(-50).reverse() };
+  // pending/approved ต้องเห็นเสมอไม่ว่าเก่าแค่ไหน (ไม่งั้นค้างอนุมัติแบบเงียบ ๆ)
+  var all = readRows(SHEET_TABS.PURCHASES);
+  var open = all.filter(function (p) { return p.Status === 'pending' || p.Status === 'approved'; });
+  var closed = all.filter(function (p) { return p.Status !== 'pending' && p.Status !== 'approved'; }).slice(-50);
+  var merged = open.concat(closed).sort(function (a, b) { return a._rowIndex - b._rowIndex; });
+  return { purchases: merged.reverse() };
 }
 
 function actionCreatePurchase(req) {
@@ -639,6 +676,10 @@ function actionUpdatePurchase(req) {
   var staff;
   if (newStatus === 'approved' || newStatus === 'rejected') {
     staff = requireRole(req, 'manager');
+    if (po.Status !== 'pending') {
+      throw new Error('รายการนี้ถูก' + (po.Status === 'purchased' ? 'ซื้อ' : 'ตัดสิน') +
+        'ไปแล้ว (สถานะ: ' + po.Status + ')');
+    }
     po.Status = newStatus;
     po.Approved_By = staff.Name;
     po.Approved_At = new Date();

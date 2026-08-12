@@ -488,6 +488,7 @@ let premiumItems = [];
 let staffList = [];
 let config = { shopName: 'Old Days', commissionPerCup: 3, lineGroupConfigured: false };
 let stockCache = [];
+let poCache = [];
 let currentIngredient = null;
 let moveType = 'in';
 let lastCloseRecord = null;
@@ -506,6 +507,9 @@ function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+// สำหรับฝัง id ลง onclick/element id — esc() ไม่พอเพราะ HTML attribute
+// decode entity กลับเป็น quote ได้ ต้องตัดอักขระนอก [A-Za-z0-9_-] ทิ้งเลย
+function safeId(s) { return String(s == null ? '' : s).replace(/[^A-Za-z0-9_-]/g, ''); }
 function todayISO() {
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -553,33 +557,57 @@ async function api(body) {
 // ══════════════════════════════════════════
 //  Init
 // ══════════════════════════════════════════
+function showInitError(msg) {
+  const el = $('initError');
+  el.style.display = 'block';
+  el.innerHTML = esc(msg) +
+    '<br><button class="btn secondary" style="margin-top:12px;" onclick="location.reload()">ลองใหม่</button>';
+  $('loadingText').style.display = 'none';
+  document.querySelector('#scLoading .spinner').style.display = 'none';
+}
+
 async function init() {
   setLoadingText('กำลังเชื่อมต่อ LINE...');
-  const liffPromise = new Promise(async (resolve) => {
-    const timer = setTimeout(() => resolve(null), 15000);
-    try {
-      await liff.init({ liffId: LIFF_ID });
+  const liffResult = await new Promise((resolve) => {
+    const timer = setTimeout(() => resolve({ status: 'timeout' }), 15000);
+    liff.init({ liffId: LIFF_ID }).then(async () => {
       clearTimeout(timer);
       if (liff.isLoggedIn()) {
         const profile = await liff.getProfile();
-        resolve(profile.userId);
+        resolve({ status: 'ok', userId: profile.userId });
       } else {
         liff.login();
-        resolve(null);
+        resolve({ status: 'redirect' });
       }
-    } catch (e) {
+    }).catch((e) => {
       clearTimeout(timer);
-      console.warn('LIFF fallback dev mode:', e.message);
-      resolve('dev-' + (localStorage.getItem('olddays_dev_id') || (() => {
-        const id = Date.now();
-        localStorage.setItem('olddays_dev_id', id);
-        return id;
-      })()));
-    }
+      resolve({ status: 'error', message: e.message });
+    });
   });
 
-  lineUserId = await liffPromise;
-  if (!lineUserId) return; // กำลัง redirect ไป login
+  if (liffResult.status === 'redirect') {
+    setLoadingText('กำลังพาไปหน้า Login LINE...');
+    return;
+  }
+  if (liffResult.status === 'ok') {
+    lineUserId = liffResult.userId;
+  } else {
+    // dev mode เฉพาะตอนเทสในเครื่องเท่านั้น — ห้าม fallback ใน production
+    // ไม่งั้นคนนอกที่เปิด URL ตรง ๆ จะสมัครเป็นพนักงาน (หรือ owner คนแรก) ได้
+    const isDev = ['localhost', '127.0.0.1'].includes(location.hostname) ||
+      new URLSearchParams(location.search).has('dev');
+    if (!isDev) {
+      showInitError(liffResult.status === 'timeout'
+        ? 'เชื่อมต่อ LINE ไม่สำเร็จ (หมดเวลา) — เช็คสัญญาณเน็ตแล้วลองใหม่'
+        : 'เปิดผ่านลิงก์ LIFF ในแอป LINE เท่านั้น (' + (liffResult.message || '') + ')');
+      return;
+    }
+    console.warn('LIFF dev mode');
+    if (!localStorage.getItem('olddays_dev_id')) {
+      localStorage.setItem('olddays_dev_id', String(Date.now()));
+    }
+    lineUserId = 'dev-' + localStorage.getItem('olddays_dev_id');
+  }
 
   setLoadingText('กำลังโหลดข้อมูลร้าน...');
   try {
@@ -673,20 +701,26 @@ async function loadDashboard() {
   // เบิกซื้อรออนุมัติ (manager+)
   if (myLevel() >= ROLE_LEVEL.manager) {
     api({ action: 'getPurchases' }).then(d => {
-      const pending = (d.purchases || []).filter(p => p.Status === 'pending');
+      poCache = d.purchases || [];
+      const pending = poCache.filter(p => p.Status === 'pending');
       $('pendingPoCard').style.display = pending.length ? 'block' : 'none';
       $('pendingPoList').innerHTML = pending.map(p =>
         '<div class="list-row"><div class="list-main"><div class="list-title">' + esc(p.Items) + '</div>' +
         '<div class="list-sub">' + esc(p.Requested_By) + (num(p.Est_Cost) ? ' · ~' + money(p.Est_Cost) + ' ฿' : '') + '</div></div>' +
-        '<button class="btn small green" onclick="quickApprove(\'' + esc(p.Purchase_ID) + '\')">อนุมัติ</button></div>'
+        '<button class="btn small green" onclick="quickApprove(\'' + safeId(p.Purchase_ID) + '\')">อนุมัติ</button></div>'
       ).join('');
     }).catch(() => {});
   }
 }
 
-async function quickApprove(purchaseId) {
+function realPoId(sid) {
+  const p = poCache.find(x => safeId(x.Purchase_ID) === sid);
+  return p ? p.Purchase_ID : sid;
+}
+
+async function quickApprove(sid) {
   try {
-    await api({ action: 'updatePurchase', purchaseId, status: 'approved' });
+    await api({ action: 'updatePurchase', purchaseId: realPoId(sid), status: 'approved' });
     showToast('อนุมัติแล้ว ✓');
     loadDashboard();
   } catch (e) { showToast(e.message); }
@@ -888,7 +922,7 @@ async function loadStock() {
     stockCache = d.ingredients || [];
     $('stockList').innerHTML = stockCache.map(i => {
       const low = num(i.Current_Stock) <= num(i.Min_Stock);
-      return '<div class="list-row" style="cursor:pointer" onclick="openStockModal(\'' + esc(i.Ingredient_ID) + '\')">' +
+      return '<div class="list-row" style="cursor:pointer" onclick="openStockModal(\'' + safeId(i.Ingredient_ID) + '\')">' +
         '<div class="list-main"><div class="list-title">' + esc(i.Name) + '</div>' +
         '<div class="list-sub">ขั้นต่ำ ' + num(i.Min_Stock) + ' ' + esc(i.Unit) + '</div></div>' +
         '<span class="badge ' + (low ? 'low' : 'ok') + '">' + num(i.Current_Stock) + ' ' + esc(i.Unit) + '</span></div>';
@@ -907,8 +941,8 @@ async function loadStock() {
   }
 }
 
-function openStockModal(ingredientId) {
-  currentIngredient = stockCache.find(i => i.Ingredient_ID === ingredientId);
+function openStockModal(sid) {
+  currentIngredient = stockCache.find(i => safeId(i.Ingredient_ID) === sid);
   if (!currentIngredient) return;
   $('smTitle').textContent = currentIngredient.Name;
   $('smInfo').textContent = 'คงเหลือ ' + num(currentIngredient.Current_Stock) + ' ' +
@@ -931,6 +965,8 @@ function pickMoveType(el) {
 
 async function submitStockMove() {
   if (!currentIngredient) return;
+  // กันเคสกด "นับสต๊อก" แล้วลืมกรอก — num('') = 0 จะทับสต๊อกเป็น 0 เงียบ ๆ
+  if ($('smQty').value.trim() === '') { showToast('กรอกจำนวนก่อน'); return; }
   const qty = num($('smQty').value);
   if (moveType !== 'count' && qty <= 0) { showToast('กรอกจำนวนก่อน'); return; }
   try {
@@ -966,16 +1002,18 @@ async function addIngredient() {
 async function loadPurchases() {
   try {
     const d = await api({ action: 'getPurchases' });
+    poCache = d.purchases || [];
     const statusTh = { pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ไม่อนุมัติ', purchased: 'ซื้อแล้ว' };
-    $('poList').innerHTML = (d.purchases || []).map(p => {
+    $('poList').innerHTML = poCache.map(p => {
+      const sid = safeId(p.Purchase_ID);
       let actions = '';
       if (p.Status === 'pending' && myLevel() >= ROLE_LEVEL.manager) {
         actions = '<div style="margin-top:8px;display:flex;gap:8px;">' +
-          '<button class="btn small green" onclick="updatePo(\'' + esc(p.Purchase_ID) + '\',\'approved\')">อนุมัติ</button>' +
-          '<button class="btn small danger" onclick="updatePo(\'' + esc(p.Purchase_ID) + '\',\'rejected\')">ไม่อนุมัติ</button></div>';
+          '<button class="btn small green" onclick="updatePo(\'' + sid + '\',\'approved\')">อนุมัติ</button>' +
+          '<button class="btn small danger" onclick="updatePo(\'' + sid + '\',\'rejected\')">ไม่อนุมัติ</button></div>';
       } else if (p.Status === 'approved') {
-        actions = '<div style="margin-top:8px;display:flex;gap:8px;align-items:center;" id="pf-' + esc(p.Purchase_ID) + '">' +
-          '<button class="btn small" onclick="showActualCost(\'' + esc(p.Purchase_ID) + '\')">💰 ซื้อแล้ว บันทึกยอดจริง</button></div>';
+        actions = '<div style="margin-top:8px;display:flex;gap:8px;align-items:center;" id="pf-' + sid + '">' +
+          '<button class="btn small" onclick="showActualCost(\'' + sid + '\')">💰 ซื้อแล้ว บันทึกยอดจริง</button></div>';
       }
       return '<div class="list-row"><div class="list-main">' +
         '<div class="list-title">' + esc(p.Items) + '</div>' +
@@ -1001,30 +1039,30 @@ async function createPurchase() {
   } catch (e) { showToast(e.message); }
 }
 
-async function updatePo(purchaseId, status) {
+async function updatePo(sid, status) {
   try {
-    await api({ action: 'updatePurchase', purchaseId, status });
+    await api({ action: 'updatePurchase', purchaseId: realPoId(sid), status });
     showToast(status === 'approved' ? 'อนุมัติแล้ว ✓' : 'ปฏิเสธแล้ว');
     loadPurchases();
   } catch (e) { showToast(e.message); }
 }
 
 // prompt() โดนบล็อกใน LINE webview บางเครื่อง → ใช้ input ในแถวแทน
-function showActualCost(purchaseId) {
-  const box = $('pf-' + purchaseId);
+function showActualCost(sid) {
+  const box = $('pf-' + sid);
   if (!box) return;
   box.innerHTML =
-    '<input type="number" id="ac-' + purchaseId + '" inputmode="decimal" step="0.01" ' +
+    '<input type="number" id="ac-' + sid + '" inputmode="decimal" step="0.01" ' +
     'placeholder="ยอดจ่ายจริง (บาท)" style="flex:1;" />' +
-    '<button class="btn small green" onclick="submitPurchased(\'' + purchaseId + '\')">บันทึก</button>';
-  $('ac-' + purchaseId).focus();
+    '<button class="btn small green" onclick="submitPurchased(\'' + sid + '\')">บันทึก</button>';
+  $('ac-' + sid).focus();
 }
 
-async function submitPurchased(purchaseId) {
-  const cost = num($('ac-' + purchaseId).value);
+async function submitPurchased(sid) {
+  const cost = num($('ac-' + sid).value);
   if (cost <= 0) { showToast('กรอกยอดที่จ่ายจริงก่อน'); return; }
   try {
-    await api({ action: 'updatePurchase', purchaseId, status: 'purchased', actualCost: cost });
+    await api({ action: 'updatePurchase', purchaseId: realPoId(sid), status: 'purchased', actualCost: cost });
     showToast('บันทึกซื้อแล้ว ✓');
     loadPurchases();
   } catch (e) { showToast(e.message); }
