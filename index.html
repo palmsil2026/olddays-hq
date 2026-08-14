@@ -245,7 +245,7 @@
       <div class="stat-grid">
         <div class="stat"><div class="v" id="stSales">–</div><div class="l">ยอดขายรวม (฿)</div></div>
         <div class="stat"><div class="v" id="stDays">–</div><div class="l">วันที่ปิดยอด</div></div>
-        <div class="stat"><div class="v" id="stCommission">–</div><div class="l" id="stCommissionLabel">ค่าคอมของฉัน (฿)</div></div>
+        <div class="stat"><div class="v" id="stAvg">–</div><div class="l">เฉลี่ยต่อวัน (฿)</div></div>
         <div class="stat"><div class="v" id="stDiscount">–</div><div class="l">ส่วนลดรวม (฿)</div></div>
       </div>
     </div>
@@ -673,18 +673,12 @@ async function loadDashboard() {
   }).catch(() => { $('todayStatus').textContent = 'โหลดไม่สำเร็จ'; });
 
   // สรุปเดือน
+  // ค่าคอมไม่โชว์บน dashboard — ดูได้ตอนปิดยอดรายวันเท่านั้น (เจ้าของดูรวมได้ในแท็บ Commission ของ Sheet)
   api({ action: 'getReport', month }).then(d => {
     $('stSales').textContent = money(d.totals.sales);
     $('stDays').textContent = d.totals.days;
+    $('stAvg').textContent = d.totals.days ? money(d.totals.sales / d.totals.days) : '–';
     $('stDiscount').textContent = money(d.totals.discount);
-    const mine = d.commissionByStaff[me.Name];
-    if (myLevel() >= ROLE_LEVEL.manager) {
-      const totalCom = Object.values(d.commissionByStaff).reduce((s, x) => s + x.amount, 0);
-      $('stCommission').textContent = money(totalCom);
-      $('stCommissionLabel').textContent = 'ค่าคอมรวมทุกคน (฿)';
-    } else {
-      $('stCommission').textContent = money(mine ? mine.amount : 0);
-    }
   }).catch(() => {});
 
   // สต๊อกใกล้หมด
@@ -930,11 +924,16 @@ async function loadStock() {
 
     $('stockMoves').innerHTML = (d.recentMoves || []).slice(0, 12).map(m => {
       const icon = { in: '📥', out: '📤', count: '🔢' }[m.Type] || '·';
+      // ปุ่ม undo เฉพาะรายการล่าสุดของวัตถุดิบนั้น (backend กันไว้อีกชั้น)
+      const undoBtn = m.IsLatest
+        ? '<button class="btn small danger" style="margin-left:8px" onclick="undoStockMove(' +
+          parseInt(m.RowIndex, 10) + ', this)">↩︎ ลบ</button>'
+        : '';
       return '<div class="list-row"><div class="list-main">' +
         '<div class="list-title">' + icon + ' ' + esc(m.Ingredient_Name) + ' ' +
         (m.Type === 'count' ? 'นับได้ ' : (m.Type === 'in' ? '+' : '−')) + num(m.Qty) + '</div>' +
         '<div class="list-sub">' + esc(m.By) + (m.Note ? ' · ' + esc(m.Note) : '') + '</div></div>' +
-        '<span class="muted" style="font-size:12px">เหลือ ' + num(m.Balance_After) + '</span></div>';
+        '<span class="muted" style="font-size:12px">เหลือ ' + num(m.Balance_After) + '</span>' + undoBtn + '</div>';
     }).join('') || '<span class="muted">ยังไม่มีความเคลื่อนไหว</span>';
   } catch (e) {
     $('stockList').textContent = 'โหลดไม่สำเร็จ: ' + e.message;
@@ -978,6 +977,21 @@ async function submitStockMove() {
     showToast(d.low ? '⚠️ บันทึกแล้ว — ใกล้หมด เหลือ ' + d.balance : 'บันทึกแล้ว ✓ เหลือ ' + d.balance);
     loadStock();
   } catch (e) { showToast(e.message); }
+}
+
+// ลบรายการสต๊อกที่กดผิด — กด 2 ครั้งกันมือลั่น (confirm() โดนบล็อกใน LINE webview บางเครื่อง)
+async function undoStockMove(rowIndex, btn) {
+  if (btn.dataset.armed !== '1') {
+    btn.dataset.armed = '1';
+    btn.textContent = 'แน่ใจ? กดอีกที';
+    setTimeout(() => { btn.dataset.armed = ''; btn.textContent = '↩︎ ลบ'; }, 3000);
+    return;
+  }
+  try {
+    const d = await api({ action: 'deleteStockMove', rowIndex });
+    showToast('ลบแล้ว ✓ ยอดกลับเป็น ' + d.balance);
+    loadStock();
+  } catch (e) { showToast(e.message, 4000); }
 }
 
 async function addIngredient() {
@@ -1102,17 +1116,10 @@ async function loadReport() {
       '<div class="stat"><div class="v">' + money(t.cash) + '</div><div class="l">เงินสด</div></div>' +
       '<div class="stat"><div class="v">' + money(t.tct) + '</div><div class="l">ไทยช่วยไทย</div></div>' +
       '<div class="stat"><div class="v">' + money(t.transfer) + '</div><div class="l">เงินโอน</div></div>' +
-      '<div class="stat"><div class="v">' + money(t.commission) + '</div><div class="l">ค่าคอมรวม</div></div>' +
+      '<div class="stat"><div class="v">' + (t.days ? money(t.sales / t.days) : '–') + '</div><div class="l">เฉลี่ยต่อวัน</div></div>' +
       '</div>';
-    const names = Object.keys(d.commissionByStaff);
-    $('repCommission').innerHTML = names.length
-      ? '<div class="divider"></div><div class="card-title">💰 ค่าคอมรายคน</div>' + names.map(n => {
-          const x = d.commissionByStaff[n];
-          return '<div class="list-row"><div class="list-main"><div class="list-title">' + esc(n) + '</div>' +
-            '<div class="list-sub">' + x.days + ' วัน</div></div>' +
-            '<b style="color:var(--gold)">' + money(x.amount) + ' ฿</b></div>';
-        }).join('')
-      : '';
+    // ค่าคอมรายคนไม่แสดงในรายงาน — เจ้าของดูได้ในแท็บ Commission ของ Google Sheet
+    $('repCommission').innerHTML = '';
   } catch (e) {
     $('repSummary').textContent = e.message;
   }

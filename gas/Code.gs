@@ -102,7 +102,7 @@ function doPost(e) {
 // ไม่งั้นหน้า dashboard (ยิง 4 read พร้อมกัน) จะไปต่อคิวกันเองจนช้า
 var WRITE_ACTIONS = {
   registerStaff: 1, submitDailyClose: 1, stockMove: 1, addIngredient: 1,
-  createPurchase: 1, updatePurchase: 1, saveMenuItem: 1,
+  deleteStockMove: 1, createPurchase: 1, updatePurchase: 1, saveMenuItem: 1,
 };
 
 function handleRequest(e) {
@@ -155,6 +155,7 @@ function route(action, req) {
     case 'getStock':         return actionGetStock(req);
     case 'addIngredient':    return actionAddIngredient(req);
     case 'stockMove':        return actionStockMove(req);
+    case 'deleteStockMove':  return actionDeleteStockMove(req);
 
     // ── เบิกซื้อ ──
     case 'getPurchases':     return actionGetPurchases(req);
@@ -563,10 +564,73 @@ function actionGetStock(req) {
   requireStaff(req);
   var ingredients = readRows(SHEET_TABS.INGREDIENTS).filter(function (i) { return isTrue(i.Active); });
   var moves = readRows(SHEET_TABS.STOCK_MOVES);
+  // แจ้งฝั่งหน้าเว็บด้วยว่ารายการไหนคือ "ล่าสุด" ของวัตถุดิบนั้นๆ — มีปุ่มลบได้เฉพาะรายการนั้น (กันยอดคงเหลือเพี้ยน)
+  var latestRowByIng = {};
+  moves.forEach(function (m) { latestRowByIng[m.Ingredient_ID] = m._rowIndex; });
+  var recent = moves.slice(-30).reverse().map(function (m) {
+    return {
+      RowIndex: m._rowIndex,
+      Timestamp: m.Timestamp, Ingredient_ID: m.Ingredient_ID, Ingredient_Name: m.Ingredient_Name,
+      Type: m.Type, Qty: m.Qty, Balance_After: m.Balance_After, Note: m.Note, By: m.By,
+      IsLatest: latestRowByIng[m.Ingredient_ID] === m._rowIndex,
+    };
+  });
   return {
     ingredients: ingredients,
-    recentMoves: moves.slice(-30).reverse(),
+    recentMoves: recent,
   };
+}
+
+// ลบ/undo รายการเคลื่อนไหวสต๊อกที่เพิ่งกดผิด — ลบได้เฉพาะรายการ "ล่าสุด" ของวัตถุดิบนั้นๆ เท่านั้น
+// (ถ้าลบรายการเก่ากว่านั้นได้ ยอดคงเหลือของรายการหลังจากมันจะเพี้ยนหมด) รายการเก่ากว่าให้ใช้ "นับสต๊อก" แก้แทน
+function actionDeleteStockMove(req) {
+  requireStaff(req);
+  var rowIndex = parseInt(req.rowIndex, 10);
+  if (!rowIndex) throw new Error('ไม่พบรายการนี้');
+
+  var moves = readRows(SHEET_TABS.STOCK_MOVES);
+  var target = null;
+  for (var i = 0; i < moves.length; i++) {
+    if (moves[i]._rowIndex === rowIndex) { target = moves[i]; break; }
+  }
+  if (!target) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว)');
+
+  var sameIng = moves.filter(function (m) { return m.Ingredient_ID === target.Ingredient_ID; });
+  var latest = sameIng[sameIng.length - 1];
+  if (latest._rowIndex !== target._rowIndex) {
+    throw new Error('ลบได้เฉพาะรายการล่าสุดของ "' + target.Ingredient_Name + '" เท่านั้นค่ะ — '
+      + 'ถ้ารายการเก่ากว่านี้ผิด ให้ใช้ "นับสต๊อก" ปรับยอดปัจจุบันให้ตรงแทนนะคะ');
+  }
+
+  // หายอดคงเหลือ "ก่อน" รายการนี้ — ถ้ามีรายการก่อนหน้าของวัตถุดิบเดียวกัน ใช้ยอดนั้นเลย
+  // ถ้าเป็นรายการแรกของวัตถุดิบนี้ ย้อนคำนวณจากยอดปัจจุบันตามชนิดการเคลื่อนไหว (นับสต๊อกย้อนไม่ได้ ต้องนับใหม่เอง)
+  var ingRows = readRows(SHEET_TABS.INGREDIENTS);
+  var ing = null;
+  for (var k = 0; k < ingRows.length; k++) {
+    if (ingRows[k].Ingredient_ID === target.Ingredient_ID) { ing = ingRows[k]; break; }
+  }
+  if (!ing) throw new Error('ไม่พบวัตถุดิบนี้แล้วในระบบ');
+
+  var prevBalance;
+  if (sameIng.length >= 2) {
+    prevBalance = num(sameIng[sameIng.length - 2].Balance_After);
+  } else if (target.Type === 'in') {
+    prevBalance = num(ing.Current_Stock) - num(target.Qty);
+  } else if (target.Type === 'out') {
+    prevBalance = num(ing.Current_Stock) + num(target.Qty);
+  } else {
+    prevBalance = num(ing.Current_Stock); // count รายการแรก — ย้อนยอดก่อนหน้าไม่ได้ ต้องนับสต๊อกใหม่เองถ้าไม่ตรง
+  }
+
+  var keep = ing._rowIndex;
+  delete ing._rowIndex;
+  ing.Current_Stock = prevBalance;
+  ing.Updated_At = new Date();
+  updateRowObj(SHEET_TABS.INGREDIENTS, keep, ing);
+
+  getSheet(SHEET_TABS.STOCK_MOVES).deleteRow(target._rowIndex);
+
+  return { balance: prevBalance };
 }
 
 function actionAddIngredient(req) {
