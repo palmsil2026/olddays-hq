@@ -930,15 +930,37 @@ async function loadStock() {
 
     $('stockMoves').innerHTML = (d.recentMoves || []).slice(0, 12).map(m => {
       const icon = { in: '📥', out: '📤', count: '🔢' }[m.Type] || '·';
+      // ลบ/แก้ไขได้เฉพาะรายการล่าสุดของวัตถุดิบนั้นๆ (กันยอดคงเหลือของรายการหลังจากมันเพี้ยน)
+      const delBtn = m.IsLatest
+        ? '<button class="btn small danger" style="margin-top:6px" onclick="deleteStockMove(' + m.RowIndex + ',this)">🗑️ ลบรายการนี้ (กดผิด)</button>'
+        : '';
       return '<div class="list-row"><div class="list-main">' +
         '<div class="list-title">' + icon + ' ' + esc(m.Ingredient_Name) + ' ' +
         (m.Type === 'count' ? 'นับได้ ' : (m.Type === 'in' ? '+' : '−')) + num(m.Qty) + '</div>' +
-        '<div class="list-sub">' + esc(m.By) + (m.Note ? ' · ' + esc(m.Note) : '') + '</div></div>' +
+        '<div class="list-sub">' + esc(m.By) + (m.Note ? ' · ' + esc(m.Note) : '') + '</div>' +
+        delBtn + '</div>' +
         '<span class="muted" style="font-size:12px">เหลือ ' + num(m.Balance_After) + '</span></div>';
     }).join('') || '<span class="muted">ยังไม่มีความเคลื่อนไหว</span>';
   } catch (e) {
     $('stockList').textContent = 'โหลดไม่สำเร็จ: ' + e.message;
   }
+}
+
+// LINE webview บล็อก confirm()/prompt() บางเครื่อง → ใช้แตะยืนยันซ้ำในปุ่มแทน
+let stockMoveDeleteConfirm = null;
+async function deleteStockMove(rowIndex, btn) {
+  if (stockMoveDeleteConfirm !== rowIndex) {
+    stockMoveDeleteConfirm = rowIndex;
+    if (btn) btn.textContent = '⚠️ แตะอีกครั้งเพื่อยืนยันลบ';
+    setTimeout(() => { if (stockMoveDeleteConfirm === rowIndex) stockMoveDeleteConfirm = null; }, 4000);
+    return;
+  }
+  stockMoveDeleteConfirm = null;
+  try {
+    await api({ action: 'deleteStockMove', rowIndex });
+    showToast('ลบรายการแล้ว ✓');
+    loadStock();
+  } catch (e) { showToast(e.message); }
 }
 
 function openStockModal(sid) {
