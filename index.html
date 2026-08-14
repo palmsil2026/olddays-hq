@@ -937,13 +937,24 @@ async function loadStock() {
       return '<div class="list-row"><div class="list-main">' +
         '<div class="list-title">' + icon + ' ' + esc(m.Ingredient_Name) + ' ' +
         (m.Type === 'count' ? 'นับได้ ' : (m.Type === 'in' ? '+' : '−')) + num(m.Qty) + '</div>' +
-        '<div class="list-sub">' + esc(m.By) + (m.Note ? ' · ' + esc(m.Note) : '') + '</div>' +
+        '<div class="list-sub">' + moveTime(m.Timestamp) + esc(m.By) + (m.Note ? ' · ' + esc(m.Note) : '') + '</div>' +
         delBtn + '</div>' +
         '<span class="muted" style="font-size:12px">เหลือ ' + num(m.Balance_After) + '</span></div>';
     }).join('') || '<span class="muted">ยังไม่มีความเคลื่อนไหว</span>';
   } catch (e) {
     $('stockList').textContent = 'โหลดไม่สำเร็จ: ' + e.message;
   }
+}
+
+// เวลากำกับใน log — ไม่มีเวลาแล้วรายการที่กดซ้ำ (เช่น +82 สองแถวติด) จะดูเหมือนข้อมูลเบิ้ลมั่วๆ
+function moveTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (isNaN(d)) return '';
+  const today = new Date();
+  const sameDay = d.getDate() === today.getDate() && d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+  const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  return '🕐 ' + (sameDay ? '' : (d.getDate() + '/' + (d.getMonth() + 1) + ' ')) + hm + ' · ';
 }
 
 // LINE webview บล็อก confirm()/prompt() บางเครื่อง → ใช้แตะยืนยันซ้ำในปุ่มแทน
