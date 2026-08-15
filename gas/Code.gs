@@ -25,7 +25,11 @@ var SHEET_TABS = {
   STOCK_MOVES: 'StockMoves',
   PURCHASES: 'Purchases',
   CONFIG: 'Config',
+  IMPORT_LOG: 'ImportLog',
 };
+
+// ชื่อผู้ส่งของ record ที่ดึงจากอีเมล POS อัตโนมัติ — แอปใช้แยกว่ายังรอคนยืนยัน
+var AUTO_SUBMITTER = 'FoodStory (อัตโนมัติ)';
 
 var HEADERS = {
   Staff: ['LINE_User_ID', 'Name', 'Nickname', 'Role', 'Active', 'Created_At'],
@@ -43,6 +47,7 @@ var HEADERS = {
   Purchases: ['Purchase_ID', 'Requested_At', 'Requested_By', 'Items', 'Est_Cost', 'Status',
     'Approved_By', 'Approved_At', 'Actual_Cost', 'Purchased_At', 'Note'],
   Config: ['Key', 'Value'],
+  ImportLog: ['Message_ID', 'Date', 'Imported_At', 'Status'],
 };
 
 var SEED_CATEGORIES = [
@@ -103,6 +108,7 @@ function doPost(e) {
 var WRITE_ACTIONS = {
   registerStaff: 1, submitDailyClose: 1, stockMove: 1, addIngredient: 1,
   deleteStockMove: 1, createPurchase: 1, updatePurchase: 1, saveMenuItem: 1,
+  importFromGmail: 1,
 };
 
 function handleRequest(e) {
@@ -150,6 +156,7 @@ function route(action, req) {
     case 'getDailyClose':    return actionGetDailyClose(req);
     case 'getReport':        return actionGetReport(req);
     case 'resendSummary':    return actionResendSummary(req);
+    case 'importFromGmail':  return actionImportFromGmail(req);
 
     // ── สต๊อก ──
     case 'getStock':         return actionGetStock(req);
@@ -418,12 +425,15 @@ function actionSubmitDailyClose(req) {
     return dateKey(r.Date) === date;
   });
   if (existing.length) {
-    var canOverwrite = (ROLE_LEVEL[staff.Role] >= ROLE_LEVEL.manager) ||
-      existing[existing.length - 1].Submitted_By === staff.Name;
+    var last = existing[existing.length - 1];
+    // record ที่ดึงจาก POS อัตโนมัติ = ฉบับร่างรอคนยืนยัน ใครก็ยืนยันทับได้เลยไม่ต้องถาม
+    var isAutoDraft = last.Submitted_By === AUTO_SUBMITTER;
+    var canOverwrite = isAutoDraft || (ROLE_LEVEL[staff.Role] >= ROLE_LEVEL.manager) ||
+      last.Submitted_By === staff.Name;
     if (!canOverwrite) throw new Error('วันที่นี้ถูกปิดยอดไปแล้วโดย ' +
-      existing[existing.length - 1].Submitted_By + ' (ให้ผู้บริหารเป็นคนแก้)');
-    if (!req.confirmOverwrite) {
-      return { needConfirm: true, existing: existing[existing.length - 1] };
+      last.Submitted_By + ' (ให้ผู้บริหารเป็นคนแก้)');
+    if (!isAutoDraft && !req.confirmOverwrite) {
+      return { needConfirm: true, existing: last };
     }
     // ลบแถวเก่า (จากล่างขึ้นบนกัน index เลื่อน)
     var sheet = getSheet(SHEET_TABS.DAILY);
@@ -1014,6 +1024,226 @@ function kvRow(label, value, C) {
 
 function safeParse(json) {
   try { return JSON.parse(json) || {}; } catch (e) { return {}; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ดึงรายงานปิดรอบ FoodStory จาก Gmail อัตโนมัติ
+//  เงื่อนไข: Apps Script ต้องรันด้วยบัญชี Google เดียวกับที่รับอีเมล
+//  เปิดใช้: รัน setupImportTrigger ครั้งเดียวใน editor (จะขอสิทธิ์ Gmail)
+// ═══════════════════════════════════════════════════════════════
+
+var IMPORT_QUERY = 'from:noreply@foodstory.co subject:"Close Drawer Report" newer_than:3d';
+
+/** ตั้ง trigger ดึงอีเมลทุกชั่วโมง — รันครั้งเดียวพอ */
+function setupImportTrigger() {
+  var exists = ScriptApp.getProjectTriggers().some(function (t) {
+    return t.getHandlerFunction() === 'importDrawerReports';
+  });
+  if (!exists) {
+    ScriptApp.newTrigger('importDrawerReports').timeBased().everyHours(1).create();
+  }
+  // รันทันทีหนึ่งรอบให้เห็นผลเลย
+  return importDrawerReports();
+}
+
+/** ปุ่มในแอป: ดึงตอนนี้เลย */
+function actionImportFromGmail(req) {
+  requireStaff(req);
+  return importDrawerReports();
+}
+
+function importDrawerReports() {
+  ensureSetup();
+  var doneIds = {};
+  readRows(SHEET_TABS.IMPORT_LOG).forEach(function (r) { doneIds[r.Message_ID] = true; });
+
+  var results = [];
+  var threads = GmailApp.search(IMPORT_QUERY);
+  threads.forEach(function (th) {
+    th.getMessages().forEach(function (msg) {
+      var id = msg.getId();
+      if (doneIds[id]) return;
+      var status;
+      var parsed = null;
+      try {
+        parsed = parseDrawerReport(msg.getPlainBody());
+        status = parsed && parsed.date ? saveImportedClose(parsed) : 'parse-failed';
+      } catch (e) {
+        status = 'error: ' + e.message;
+      }
+      appendRowObj(SHEET_TABS.IMPORT_LOG, {
+        Message_ID: id,
+        Date: parsed && parsed.date ? parsed.date : '',
+        Imported_At: new Date(),
+        Status: status,
+      });
+      results.push({ date: parsed && parsed.date, status: status });
+    });
+  });
+  return { imported: results };
+}
+
+/** ดึงเลขตัวสุดท้ายของบรรทัด เช่น "| By Cash | 4 | 233.50 |" → 233.50 */
+function lastNum(line) {
+  var m = String(line).replace(/\|/g, ' ').match(/(-?[\d,]+\.?\d*)\s*$/);
+  return m ? num(m[1].replace(/,/g, '')) : 0;
+}
+
+/** ดึงเลข 2 ตัวท้ายของบรรทัด (count, amount) */
+function lastTwoNums(line) {
+  var nums = String(line).replace(/\|/g, ' ').match(/-?[\d,]+\.?\d*/g) || [];
+  var take = nums.slice(-2).map(function (s) { return num(s.replace(/,/g, '')); });
+  return take.length === 2 ? take : [0, take[0] || 0];
+}
+
+/**
+ * แกะอีเมล "รายงานปิดรอบ" ของ FoodStory/Wongnai POS เป็น object
+ * (ฟอร์แมตบรรทัดแบบ | ชื่อ | จำนวน | เงิน |)
+ */
+function parseDrawerReport(text) {
+  var lines = String(text).split('\n').map(function (l) { return l.trim(); });
+  var joined = lines.join('\n');
+
+  var dm = joined.match(/ประจำวันที่\s+(\d{2})\/(\d{2})\/(\d{4})/);
+  if (!dm) return null;
+  var date = dm[3] + '-' + dm[2] + '-' + dm[1];
+
+  function findLine(needle, exclude) {
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].indexOf(needle) !== -1 && (!exclude || lines[i].indexOf(exclude) === -1)) return lines[i];
+    }
+    return '';
+  }
+
+  // ── หมวดขาย: ระหว่าง "Sales by Category" ถึง "Sub Total" ──
+  var categories = [];
+  var inCat = false;
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].indexOf('Sales by Category') !== -1) { inCat = true; continue; }
+    if (!inCat) continue;
+    if (lines[i].indexOf('Sub Total') !== -1) break;
+    var parts = lines[i].split('|').map(function (p) { return p.trim(); }).filter(Boolean);
+    if (parts.length >= 3) {
+      categories.push({ name: parts[0], count: num(parts[1].replace(/,/g, '')), amount: num(parts[2].replace(/,/g, '')) });
+    }
+  }
+
+  var discount = lastTwoNums(findLine('Sub.TTL DC'));
+  var tctLine = findLine('ไทยช่วยไทย') || findLine('By Custom Payment');
+  var voidAll = lastTwoNums(findLine('Void All'));
+
+  return {
+    date: date,
+    totalSales: lastNum(findLine('Total Sales')),
+    cash: lastNum(findLine('By Cash')),
+    creditCard: lastNum(findLine('By Credit Card')),
+    thaiQR: lastNum(findLine('By Thai QR')),
+    thaiChuayThai: lastNum(tctLine),
+    discountCount: Math.abs(discount[0]),
+    discountTotal: Math.abs(discount[1]),
+    voidCount: voidAll[0],
+    voidTotal: voidAll[1],
+    guests: lastNum(findLine('Number of Guests')),
+    bills: lastNum(findLine('Total Bills')),
+    drawerExpected: lastNum(findLine('Expected in Drawer')),
+    drawerActual: lastNum(findLine('Actual in Drawer')),
+    drawerDiff: lastNum(findLine('Difference')),
+    categories: categories,
+  };
+}
+
+/** จับชื่อหมวดจากอีเมลเข้ากับ Category_ID ในระบบ (ตัด emoji/ช่องว่าง เทียบแบบหลวม) */
+function normalizeCatName(s) {
+  return String(s).toUpperCase()
+    .replace(/[^A-Z฀-๿]/g, ''); // เหลือแค่ตัวอักษรอังกฤษ+ไทย
+}
+
+function saveImportedClose(parsed) {
+  var date = parsed.date;
+  var existing = readRows(SHEET_TABS.DAILY).filter(function (r) {
+    return dateKey(r.Date) === date;
+  });
+  if (existing.length && existing[existing.length - 1].Submitted_By !== AUTO_SUBMITTER) {
+    return 'skipped-human-record'; // มีคนปิดยอดเองแล้ว ไม่ทับของคน
+  }
+  if (existing.length) {
+    // ทับฉบับร่างเก่าของตัวเอง (เช่นอีเมลส่งซ้ำ/แก้)
+    var sheet = getSheet(SHEET_TABS.DAILY);
+    existing.sort(function (a, b) { return b._rowIndex - a._rowIndex; })
+      .forEach(function (r) { sheet.deleteRow(r._rowIndex); });
+    deleteRowsByDate(SHEET_TABS.SALES_ROWS, date);
+  }
+
+  var cats = readRows(SHEET_TABS.CATEGORIES).filter(function (c) { return isTrue(c.Active); });
+  var config = getConfig();
+  var rate = num(config.COMMISSION_PER_CUP || 3);
+
+  // จับคู่หมวดจากอีเมล → Category_ID (ไม่เจอ = สร้างหมวดใหม่ให้เลย ไม่นับค่าคอม)
+  var categoryCounts = {};
+  var noteExtra = [];
+  parsed.categories.forEach(function (pc) {
+    var match = null;
+    for (var i = 0; i < cats.length; i++) {
+      if (normalizeCatName(cats[i].Name) === normalizeCatName(pc.name)) { match = cats[i]; break; }
+    }
+    if (!match) {
+      var newId = 'cat-' + Date.now() + '-' + Math.floor(num(pc.amount));
+      appendRowObj(SHEET_TABS.CATEGORIES, {
+        Category_ID: newId, Name: pc.name, Emoji: '', Unit: 'รายการ',
+        Count_Commission: false, Sort_Order: 50, Active: true,
+      });
+      match = { Category_ID: newId, Name: pc.name, Unit: 'รายการ', Count_Commission: false };
+      cats.push(match);
+      noteExtra.push('หมวดใหม่จาก POS: ' + pc.name + ' (ตั้งไม่นับค่าคอมไว้ก่อน)');
+    }
+    categoryCounts[match.Category_ID] = pc.count;
+  });
+
+  var cups = calcCommissionCups(categoryCounts, cats);
+  var transfer = parsed.thaiQR + parsed.creditCard;
+  if (parsed.creditCard > 0) noteExtra.push('รวมบัตรเครดิต ' + fmtMoney(parsed.creditCard) + ' ในเงินโอน');
+  noteExtra.push('ลูกค้า ' + parsed.guests + ' คน / ' + parsed.bills + ' บิล');
+  if (parsed.drawerDiff !== 0) {
+    noteExtra.push('ลิ้นชัก: คาด ' + fmtMoney(parsed.drawerExpected) + ' จริง ' +
+      fmtMoney(parsed.drawerActual) + ' (' + (parsed.drawerDiff > 0 ? '+' : '') + fmtMoney(parsed.drawerDiff) + ')');
+  }
+
+  var record = {
+    Date: date,
+    Total_Sales: parsed.totalSales,
+    Cash: parsed.cash,
+    Thai_Chuay_Thai: parsed.thaiChuayThai,
+    Transfer: transfer,
+    Cash_Over: 0,
+    Channel_Diff: Math.round((parsed.cash + parsed.thaiChuayThai + transfer - parsed.totalSales) * 100) / 100,
+    Discount_Count: parsed.discountCount,
+    Discount_Total: parsed.discountTotal,
+    Void_Count: parsed.voidCount,
+    Void_Total: parsed.voidTotal,
+    Category_Counts_JSON: JSON.stringify(categoryCounts),
+    Premium_Counts_JSON: '{}',
+    Commission_Cups: cups,
+    Commission_Rate: rate,
+    Commission_Total: Math.round(cups * rate * 100) / 100,
+    Staff_On_Shift: '',
+    Note: '📩 ดึงจากอีเมล POS | ' + noteExtra.join(' | '),
+    Submitted_By: AUTO_SUBMITTER,
+    Submitted_At: new Date(),
+  };
+  appendRowObj(SHEET_TABS.DAILY, record);
+
+  cats.forEach(function (c) {
+    appendRowObj(SHEET_TABS.SALES_ROWS, {
+      Date: date, Type: 'category', Name: c.Name,
+      Count: num(categoryCounts[c.Category_ID]), Unit: c.Unit,
+    });
+  });
+
+  // แจ้งกลุ่มสั้น ๆ ให้เข้าไปยืนยัน (การ์ดเต็มส่งตอนพนักงานกดยืนยัน+เลือกคนเข้ากะ)
+  notifyGroup('📩 ยอดปิดรอบวันที่ ' + thaiDate(date) + ' เข้าระบบแล้ว — ยอดขาย ' +
+    fmtMoney(parsed.totalSales) + ' บาท\nเปิดแอป → ปิดยอด → เลือกคนเข้ากะ แล้วกดยืนยัน เพื่อคิดค่าคอมและส่งสรุปเต็ม');
+
+  return 'imported';
 }
 
 function jsonOut(obj) {

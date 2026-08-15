@@ -425,6 +425,13 @@
       </div>
     </div>
     <div class="card">
+      <div class="card-title">📩 ดึงยอดจาก POS (Gmail)</div>
+      <p class="muted" style="font-size:12px;margin-bottom:4px;">
+        ปกติระบบดึงเองทุกชั่วโมง — ปุ่มนี้ไว้กดดึงทันทีถ้ายอดยังไม่เข้า
+      </p>
+      <button class="btn secondary" onclick="importFromGmail(this)">ดึงตอนนี้เลย</button>
+    </div>
+    <div class="card">
       <div class="card-title">🔁 ส่งสรุปยอดเข้ากลุ่มอีกครั้ง</div>
       <label class="fl">วันที่</label>
       <input type="date" id="resendDate" />
@@ -803,18 +810,50 @@ function validateMoney() {
   }
 }
 
+const AUTO_SUBMITTER = 'FoodStory (อัตโนมัติ)';
+
 async function checkExistingClose() {
   const el = $('dcExistWarn');
   el.className = 'vbanner warn';
   el.style.display = 'none';
   try {
     const d = await api({ action: 'getDailyClose', date: $('dcDate').value });
-    if (d.record) {
+    if (!d.record) return;
+    if (d.record.Submitted_By === AUTO_SUBMITTER) {
+      // ฉบับร่างจากอีเมล POS — เติมตัวเลขให้เลย เหลือแค่เลือกคนเข้ากะ
+      prefillFromRecord(d.record);
+      el.className = 'vbanner ok';
+      el.style.display = 'block';
+      el.textContent = '📩 ยอดจาก POS เข้ามาแล้ว เติมตัวเลขให้เรียบร้อย — ตรวจดู เลือกคนเข้ากะ แล้วกดปิดยอดได้เลย';
+    } else {
       el.style.display = 'block';
       el.textContent = 'วันที่นี้ปิดยอดไปแล้วโดย ' + d.record.Submitted_By +
         ' (' + money(d.record.Total_Sales) + ' ฿) — ส่งอีกครั้งจะเป็นการแก้ทับ';
     }
   } catch (e) { /* เงียบไว้ ไม่ใช่เรื่องคอขาดบาดตาย */ }
+}
+
+function prefillFromRecord(r) {
+  $('dcTotal').value = num(r.Total_Sales) || '';
+  $('dcCash').value = num(r.Cash) || '';
+  $('dcTct').value = num(r.Thai_Chuay_Thai) || '';
+  $('dcTransfer').value = num(r.Transfer) || '';
+  $('dcCashOver').value = num(r.Cash_Over) || '';
+  $('dcDiscCount').value = num(r.Discount_Count) || '';
+  $('dcDiscTotal').value = num(r.Discount_Total) || '';
+  $('dcVoidCount').value = num(r.Void_Count) || '';
+  $('dcVoidTotal').value = num(r.Void_Total) || '';
+  try {
+    const counts = JSON.parse(r.Category_Counts_JSON || '{}');
+    Object.keys(counts).forEach(id => {
+      const input = $('cat-' + id);
+      if (input) input.value = num(counts[id]);
+    });
+  } catch (e) {}
+  // เก็บ note จาก POS ไว้ (ตัด prefix ออกให้อ่านง่าย)
+  if (r.Note) $('dcNote').value = String(r.Note).replace(/^📩 ดึงจากอีเมล POS \| /, '');
+  validateMoney();
+  updateCommission();
 }
 
 async function submitDailyClose(confirmOverwrite) {
@@ -1170,6 +1209,24 @@ async function saveMenuItem() {
     showToast('บันทึกเมนูแล้ว ✓');
     loadMenu();
   } catch (e) { showToast(e.message); }
+}
+
+async function importFromGmail(btn) {
+  btn.disabled = true;
+  btn.textContent = 'กำลังดึง...';
+  try {
+    const d = await api({ action: 'importFromGmail' });
+    const rows = d.imported || [];
+    const ok = rows.filter(r => r.status === 'imported').length;
+    if (!rows.length) showToast('ไม่มีอีเมลใหม่ (ดึงไปหมดแล้ว)');
+    else if (ok) showToast('ดึงสำเร็จ ' + ok + ' วัน ✓ ไปที่แท็บปิดยอดได้เลย', 4000);
+    else showToast('เจออีเมลแต่ไม่ได้นำเข้า: ' + rows.map(r => r.status).join(', '), 4500);
+  } catch (e) {
+    showToast(e.message, 4500);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'ดึงตอนนี้เลย';
+  }
 }
 
 async function resendSummary() {
