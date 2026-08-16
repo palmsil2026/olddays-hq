@@ -513,7 +513,12 @@ function actionGetDailyClose(req) {
   var rows = readRows(SHEET_TABS.DAILY).filter(function (r) {
     return dateKey(r.Date) === String(req.date);
   });
-  return { record: rows.length ? rows[rows.length - 1] : null };
+  var rec = rows.length ? rows[rows.length - 1] : null;
+  if (rec) {
+    delete rec._rowIndex;
+    rec.Date = dateKey(rec.Date); // กัน timezone เพี้ยนตอน serialize เป็น JSON
+  }
+  return { record: rec };
 }
 
 function actionGetReport(req) {
@@ -525,6 +530,9 @@ function actionGetReport(req) {
     return dateKey(r.Date).indexOf(month) === 0;
   }).map(function (r) {
     delete r._rowIndex;
+    // ส่งวันที่เป็น string yyyy-MM-dd ตามเวลาไทยเสมอ — ถ้าปล่อยเป็น Date object
+    // ตอนแปลง JSON มันกลายเป็นเวลา UTC แล้วหน้าแอปโชว์วันถอยหลังไป 1 วัน
+    r.Date = dateKey(r.Date);
     return r;
   });
 
