@@ -159,6 +159,34 @@
     .list-title { font-size: 14px; font-weight: 500; }
     .list-sub { font-size: 12px; color: var(--dim); margin-top: 1px; word-break: break-word; }
 
+    /* ── Stock cards ── */
+    .ing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+    .ing-card {
+      background: var(--card2); border: 1px solid var(--line); border-radius: 16px;
+      padding: 14px 10px; text-align: center; cursor: pointer;
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+    .ing-card:hover {
+      transform: translateY(-5px) scale(1.04);
+      box-shadow: 0 12px 24px rgba(0,0,0,.4);
+      border-color: var(--gold);
+    }
+    .ing-card:active { transform: scale(.96); }
+    .ing-card .ing-ico { font-size: 32px; display: inline-block; margin-bottom: 6px; }
+    .ing-card:hover .ing-ico { animation: wiggle .5s ease; }
+    @keyframes wiggle {
+      0% { transform: rotate(0); }
+      25% { transform: rotate(-14deg) scale(1.18); }
+      60% { transform: rotate(10deg); }
+      100% { transform: rotate(0); }
+    }
+    .ing-card .ing-name { font-size: 13px; font-weight: 600; line-height: 1.3; min-height: 34px;
+      display: flex; align-items: center; justify-content: center; }
+    .ing-card .ing-qty { font-size: 20px; font-weight: 700; color: var(--green); margin-top: 4px; }
+    .ing-card.low { border-color: var(--red); }
+    .ing-card.low .ing-qty { color: var(--red); }
+    .ing-card .ing-min { font-size: 11px; color: var(--dim); margin-top: 2px; }
+
     /* ── Modal ── */
     .modal-bg {
       display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 40;
@@ -406,6 +434,7 @@
       <input type="month" id="repMonth" onchange="loadReport()" />
       <div id="repSummary" class="muted" style="margin-top:12px;">เลือกเดือนเพื่อดูรายงาน</div>
       <div id="repCommission"></div>
+      <div id="repDays"></div>
     </div>
     <div class="card" id="menuCard">
       <div class="card-title">🍽️ เมนูของร้าน</div>
@@ -474,6 +503,15 @@
   </div>
 </div>
 
+<!-- ══════════ Day detail modal ══════════ -->
+<div class="modal-bg" id="dayModalBg" onclick="if(event.target===this)this.classList.remove('show')">
+  <div class="modal">
+    <h3 id="dayModalTitle"></h3>
+    <div id="dayModalContent"></div>
+    <button class="btn secondary" onclick="document.getElementById('dayModalBg').classList.remove('show')">ปิด</button>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <div class="nav" id="bottomNav" style="display:none;">
@@ -499,6 +537,7 @@ let poCache = [];
 let currentIngredient = null;
 let moveType = 'in';
 let lastCloseRecord = null;
+let reportDays = [];
 
 const TAB_SCREEN = { home: 'scHome', close: 'scClose', stock: 'scStock', purchase: 'scPurchase', more: 'scMore' };
 const ROLE_TH = { owner: 'เจ้าของร้าน', manager: 'ผู้บริหาร', barista: 'บาริสต้า' };
@@ -949,17 +988,37 @@ function renderCloseDone(data) {
 // ══════════════════════════════════════════
 //  Stock
 // ══════════════════════════════════════════
+// เดาไอคอนจากชื่อวัตถุดิบ (เรียงจากคำเฉพาะ → คำกว้าง)
+const ING_EMOJI = [
+  ['นมข้น', '🥫'], ['นมโอ๊ต', '🌾'], ['น้ำโอ๊ต', '🌾'], ['นมสด', '🥛'],
+  ['เมล็ดกาแฟ', '☕'], ['กาแฟ', '☕'], ['มัทฉะ', '🍵'], ['ชาเขียว', '🍵'], ['ชาไทย', '🧋'],
+  ['โกโก้', '🍫'], ['ช็อก', '🍫'], ['วิป', '🍦'], ['ครีม', '🍦'],
+  ['เชอร์รี่', '🍒'], ['องุ่น', '🍇'], ['สตรอ', '🍓'], ['บลูเบอ', '🫐'], ['เมลอน', '🍈'], ['พีช', '🍑'],
+  ['คาราเมล', '🍮'], ['เจลาติน', '🍮'], ['วานิลลา', '🌼'], ['น้ำผึ้ง', '🍯'], ['ไซรัป', '🍯'], ['น้ำเชื่อม', '🍯'],
+  ['แก้วร้อน', '🫖'], ['แก้ว', '🥤'], ['ฝา', '🥤'], ['หลอด', '🥤'], ['ถุง', '🛍️'],
+  ['เบเกอ', '🍰'], ['ขนม', '🍰'], ['เค้ก', '🍰'], ['โซดา', '🫧'], ['นม', '🥛'], ['ชา', '🍵'], ['น้ำ', '💧'],
+];
+function ingredientEmoji(name) {
+  const s = String(name || '');
+  for (const [kw, emo] of ING_EMOJI) if (s.includes(kw)) return emo;
+  return '📦';
+}
+
 async function loadStock() {
   try {
     const d = await api({ action: 'getStock' });
     stockCache = d.ingredients || [];
-    $('stockList').innerHTML = stockCache.map(i => {
-      const low = num(i.Current_Stock) <= num(i.Min_Stock);
-      return '<div class="list-row" style="cursor:pointer" onclick="openStockModal(\'' + safeId(i.Ingredient_ID) + '\')">' +
-        '<div class="list-main"><div class="list-title">' + esc(i.Name) + '</div>' +
-        '<div class="list-sub">ขั้นต่ำ ' + num(i.Min_Stock) + ' ' + esc(i.Unit) + '</div></div>' +
-        '<span class="badge ' + (low ? 'low' : 'ok') + '">' + num(i.Current_Stock) + ' ' + esc(i.Unit) + '</span></div>';
-    }).join('') || '<span class="muted">ยังไม่มีวัตถุดิบ</span>';
+    $('stockList').innerHTML = stockCache.length
+      ? '<div class="ing-grid">' + stockCache.map(i => {
+          const low = num(i.Current_Stock) <= num(i.Min_Stock);
+          return '<div class="ing-card' + (low ? ' low' : '') + '" onclick="openStockModal(\'' + safeId(i.Ingredient_ID) + '\')">' +
+            '<span class="ing-ico">' + ingredientEmoji(i.Name) + '</span>' +
+            '<div class="ing-name">' + esc(i.Name) + '</div>' +
+            '<div class="ing-qty">' + num(i.Current_Stock) + ' <span style="font-size:12px;font-weight:500">' + esc(i.Unit) + '</span></div>' +
+            '<div class="ing-min">' + (low ? '⚠️ ใกล้หมด · ' : '') + 'ขั้นต่ำ ' + num(i.Min_Stock) + '</div>' +
+            '</div>';
+        }).join('') + '</div>'
+      : '<span class="muted">ยังไม่มีวัตถุดิบ</span>';
 
     $('stockMoves').innerHTML = (d.recentMoves || []).slice(0, 12).map(m => {
       const icon = { in: '📥', out: '📤', count: '🔢' }[m.Type] || '·';
@@ -1172,6 +1231,19 @@ async function loadReport() {
       '</div>';
     // ค่าคอมรายคนไม่แสดงในรายงาน — เจ้าของดูได้ในแท็บ Commission ของ Google Sheet
     $('repCommission').innerHTML = '';
+
+    // 📅 รายวัน — แตะเพื่อดูรายละเอียดของแต่ละวัน
+    reportDays = (d.days || []).slice().sort((a, b) => String(b.Date).localeCompare(String(a.Date)));
+    $('repDays').innerHTML = reportDays.length
+      ? '<div class="divider"></div><div class="card-title">📅 ยอดขายรายวัน (แตะดูรายละเอียด)</div>' +
+        reportDays.map((day, i) => {
+          const isAuto = day.Submitted_By === AUTO_SUBMITTER;
+          return '<div class="list-row" style="cursor:pointer" onclick="showDayDetail(' + i + ')">' +
+            '<div class="list-main"><div class="list-title">' + thaiDate(String(day.Date).slice(0, 10)) + '</div>' +
+            '<div class="list-sub">' + (isAuto ? '📩 รอยืนยันคนเข้ากะ' : 'ปิดโดย ' + esc(day.Submitted_By)) + '</div></div>' +
+            '<b style="color:var(--gold)">' + money(day.Total_Sales) + ' ฿</b></div>';
+        }).join('')
+      : '';
   } catch (e) {
     $('repSummary').textContent = e.message;
   }
@@ -1209,6 +1281,51 @@ async function saveMenuItem() {
     showToast('บันทึกเมนูแล้ว ✓');
     loadMenu();
   } catch (e) { showToast(e.message); }
+}
+
+function showDayDetail(i) {
+  const r = reportDays[i];
+  if (!r) return;
+  $('dayModalTitle').textContent = '📅 ' + thaiDate(String(r.Date).slice(0, 10));
+
+  const channels = [
+    { label: '💵 เงินสด', amount: num(r.Cash), color: 'var(--green)' },
+    { label: '🇹🇭 ไทยช่วยไทย', amount: num(r.Thai_Chuay_Thai), color: 'var(--blue)' },
+    { label: '📲 เงินโอน', amount: num(r.Transfer), color: 'var(--pink)' },
+  ];
+  const sum = channels.reduce((s, c) => s + c.amount, 0) || 1;
+
+  let html = '<div class="sum-hero"><div class="sub">ยอดขาย</div>' +
+    '<div class="big">' + money(r.Total_Sales) + '</div><div class="sub">บาท</div></div><div class="divider"></div>';
+  channels.forEach(c => {
+    const pct = Math.max(3, Math.round(c.amount / sum * 100));
+    html += '<div class="sum-row"><span>' + c.label + '</span><b>' + money(c.amount) + ' ฿</b></div>' +
+      '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + c.color + '"></div></div>';
+  });
+
+  // จำนวนขายตามหมวด (โชว์เฉพาะที่ขายได้)
+  let catHtml = '';
+  try {
+    const counts = JSON.parse(r.Category_Counts_JSON || '{}');
+    categories.forEach(c => {
+      const cnt = num(counts[c.Category_ID]);
+      if (!cnt) return;
+      catHtml += '<div class="sum-row"><span class="muted">' + (c.Emoji ? c.Emoji + ' ' : '') + esc(c.Name) +
+        '</span><span>' + cnt + ' ' + esc(c.Unit) + '</span></div>';
+    });
+  } catch (e) {}
+  if (catHtml) html += '<div class="divider"></div>' + catHtml;
+
+  html += '<div class="divider"></div>' +
+    '<div class="sum-row"><span class="muted">ส่วนลด</span><span>' + num(r.Discount_Count) + ' รายการ / ' + money(r.Discount_Total) + ' ฿</span></div>' +
+    '<div class="sum-row"><span class="muted">บิล Void</span><span>' + num(r.Void_Count) + ' บิล</span></div>' +
+    '<div class="sum-row"><span class="muted">🥤 ค่าคอม (' + num(r.Commission_Cups) + ' แก้ว)</span>' +
+    '<b style="color:var(--gold)">' + money(r.Commission_Total) + ' ฿</b></div>' +
+    '<div class="sum-row"><span class="muted">เข้ากะ</span><span>' + esc(r.Staff_On_Shift || '-') + '</span></div>';
+  if (r.Note) html += '<div class="sum-row"><span class="muted" style="font-size:12px">📝 ' + esc(r.Note) + '</span></div>';
+
+  $('dayModalContent').innerHTML = html;
+  $('dayModalBg').classList.add('show');
 }
 
 async function importFromGmail(btn) {
