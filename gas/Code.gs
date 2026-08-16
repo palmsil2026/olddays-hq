@@ -1398,11 +1398,49 @@ function saveImportedClose(parsed) {
     });
   });
 
-  // แจ้งกลุ่มสั้น ๆ ให้เข้าไปยืนยัน (การ์ดเต็มส่งตอนพนักงานกดยืนยัน+เลือกคนเข้ากะ)
-  notifyGroup('📩 ยอดปิดรอบวันที่ ' + thaiDate(date) + ' เข้าระบบแล้ว — ยอดขาย ' +
-    fmtMoney(parsed.totalSales) + ' บาท\nเปิดแอป → ปิดยอด → เลือกคนเข้ากะ แล้วกดยืนยัน เพื่อคิดค่าคอมและส่งสรุปเต็ม');
+  // ส่งการ์ดสรุปเต็มเข้ากลุ่มทันทีที่ยอดเข้า — ไม่ต้องรอคนกดยืนยัน
+  pushDailySummary(record, cats, [], config);
+
+  // เตือนของใกล้หมด/เบิกซื้อค้าง เฉพาะเมื่อมีจริงเท่านั้น (ไม่มี = เงียบไว้ ไม่รกแชท)
+  var ops = buildOpsAlertText();
+  if (ops) notifyGroup(ops);
 
   return 'imported';
+}
+
+/**
+ * ข้อความเตือนงานหน้าร้าน: วัตถุดิบใกล้หมด + เบิกซื้อที่ค้างอยู่
+ * คืน '' ถ้าไม่มีอะไรต้องเตือน — คนเรียกต้องเช็คก่อนส่ง จะได้ไม่ spam กลุ่ม
+ */
+function buildOpsAlertText() {
+  var lines = [];
+
+  var low = readRows(SHEET_TABS.INGREDIENTS).filter(function (i) {
+    return isTrue(i.Active) && num(i.Current_Stock) <= num(i.Min_Stock);
+  });
+  if (low.length) {
+    lines.push('⚠️ วัตถุดิบใกล้หมด:');
+    low.forEach(function (i) {
+      lines.push('• ' + i.Name + ' — เหลือ ' + num(i.Current_Stock) + ' ' + i.Unit);
+    });
+  }
+
+  var open = readRows(SHEET_TABS.PURCHASES).filter(function (p) {
+    return p.Status === 'pending' || p.Status === 'approved';
+  });
+  if (open.length) {
+    if (lines.length) lines.push('');
+    lines.push('🛒 เบิกซื้อที่ค้างอยู่:');
+    open.forEach(function (p) {
+      lines.push('• ' + p.Items +
+        (p.Status === 'pending'
+          ? ' (รออนุมัติ · ขอโดย ' + nickOf(p.Requested_By) + ')'
+          : ' (อนุมัติแล้ว รอซื้อ)'));
+    });
+  }
+
+  if (!lines.length) return '';
+  return '📦 เช็คของหน่อยนะคะ\n' + lines.join('\n');
 }
 
 function jsonOut(obj) {
