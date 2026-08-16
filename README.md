@@ -76,7 +76,7 @@ FoodStory POS ส่งอีเมล "Close Drawer Report" เข้า Gmail 
 2. สร้างหรือใช้ **LINE Login channel** → แท็บ LIFF → **Add**
    - Size: **Full**
    - Endpoint URL: URL ของ `index.html` ที่ deploy (เช่น GitHub Pages:
-     `https://<user>.github.io/palm-hq/olddays/`)
+     `https://<user>.github.io/olddays-hq/`)
 3. คัดลอก **LIFF ID**
 
 ## 3) แก้ config ใน `index.html`
