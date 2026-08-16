@@ -481,18 +481,17 @@ function actionSubmitDailyClose(req) {
     });
   });
 
-  // ค่าคอมแบ่งเท่ากันตามคนเข้ากะ
-  if (staffOnShift.length && commissionTotal > 0) {
-    var perHead = Math.round((commissionTotal / staffOnShift.length) * 100) / 100;
-    staffOnShift.forEach(function (name) {
-      appendRowObj(SHEET_TABS.COMMISSION, {
-        Date: date, Staff_Name: name,
-        Cups_Share: Math.round((cups / staffOnShift.length) * 100) / 100,
-        Amount: perHead,
-        Note: cups + ' แก้ว × ' + rate + ' บาท ÷ ' + staffOnShift.length + ' คน',
-      });
+  // ค่าคอมเข้าคนเดียว ไม่มีการหาร — ปกติคือเนส วันไหนเนสหยุดเป็นคนอื่นรับแทน
+  var commissionTo = String(req.commissionTo || staffOnShift[0] || '').trim();
+  if (commissionTo && commissionTotal > 0) {
+    appendRowObj(SHEET_TABS.COMMISSION, {
+      Date: date, Staff_Name: commissionTo,
+      Cups_Share: cups,
+      Amount: commissionTotal,
+      Note: cups + ' แก้ว × ' + rate + ' บาท',
     });
   }
+  record.Commission_To = commissionTo; // ส่งต่อให้ flex/แอป (ไม่ใช่คอลัมน์ใน Sheet)
 
   // ส่ง infographic เข้ากลุ่ม LINE
   var push = pushDailySummary(record, categories, premiumItems, config);
@@ -922,7 +921,6 @@ function buildDailyFlex(record, categories, premiumItems, config) {
     });
   });
 
-  var staffCount = String(record.Staff_On_Shift || '').split(',').filter(function (s) { return s.trim(); }).length;
   var extraRows = [
     kvRow('ส่วนลด', num(record.Discount_Count) + ' รายการ / ' + fmtMoney(record.Discount_Total) + ' ฿', C),
     kvRow('บิล Void', num(record.Void_Count) + ' บิล', C),
@@ -976,7 +974,7 @@ function buildDailyFlex(record, categories, premiumItems, config) {
         {
           type: 'text', size: 'xxs', color: C.dim, margin: 'sm', wrap: true,
           text: num(record.Commission_Cups) + ' แก้ว × ' + num(record.Commission_Rate) + ' บาท' +
-            (staffCount > 1 ? ' (แบ่ง ' + staffCount + ' คน)' : ''),
+            (record.Commission_To ? ' → ' + record.Commission_To : ''),
         },
       ],
     },
