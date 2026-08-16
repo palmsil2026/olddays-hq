@@ -26,6 +26,8 @@ var SHEET_TABS = {
   PURCHASES: 'Purchases',
   CONFIG: 'Config',
   IMPORT_LOG: 'ImportLog',
+  STAFF_PAY: 'StaffPay',
+  COM_PAY: 'CommissionPay',
 };
 
 // ชื่อผู้ส่งของ record ที่ดึงจากอีเมล POS อัตโนมัติ — แอปใช้แยกว่ายังรอคนยืนยัน
@@ -48,6 +50,8 @@ var HEADERS = {
     'Approved_By', 'Approved_At', 'Actual_Cost', 'Purchased_At', 'Note'],
   Config: ['Key', 'Value'],
   ImportLog: ['Message_ID', 'Date', 'Imported_At', 'Status'],
+  StaffPay: ['Staff_Name', 'PromptPay', 'Note'],
+  CommissionPay: ['Date', 'Staff_Name', 'Amount', 'Status', 'Paid_At', 'Paid_By', 'Note'],
 };
 
 var SEED_CATEGORIES = [
@@ -108,7 +112,7 @@ function doPost(e) {
 var WRITE_ACTIONS = {
   registerStaff: 1, submitDailyClose: 1, stockMove: 1, addIngredient: 1,
   deleteStockMove: 1, createPurchase: 1, updatePurchase: 1, saveMenuItem: 1,
-  importFromGmail: 1,
+  importFromGmail: 1, assignCommission: 1, payCommission: 1, payAllCommission: 1, saveStaffPay: 1,
 };
 
 function handleRequest(e) {
@@ -157,6 +161,13 @@ function route(action, req) {
     case 'getReport':        return actionGetReport(req);
     case 'resendSummary':    return actionResendSummary(req);
     case 'importFromGmail':  return actionImportFromGmail(req);
+
+    // ── ค่าคอม (หลังบ้าน manager+ เท่านั้น) ──
+    case 'getCommissionAdmin': return actionGetCommissionAdmin(req);
+    case 'assignCommission':   return actionAssignCommission(req);
+    case 'payCommission':      return actionPayCommission(req);
+    case 'payAllCommission':   return actionPayAllCommission(req);
+    case 'saveStaffPay':       return actionSaveStaffPay(req);
 
     // ── สต๊อก ──
     case 'getStock':         return actionGetStock(req);
@@ -440,7 +451,7 @@ function actionSubmitDailyClose(req) {
     existing.sort(function (a, b) { return b._rowIndex - a._rowIndex; })
       .forEach(function (r) { sheet.deleteRow(r._rowIndex); });
     deleteRowsByDate(SHEET_TABS.SALES_ROWS, date);
-    deleteRowsByDate(SHEET_TABS.COMMISSION, date);
+    // CommissionPay ไม่ลบ — การจ่ายค่าคอมเป็นเรื่องหลังบ้าน แยกจากการแก้ยอด
   }
 
   var record = {
@@ -481,17 +492,8 @@ function actionSubmitDailyClose(req) {
     });
   });
 
-  // ค่าคอมเข้าคนเดียว ไม่มีการหาร — ปกติคือเนส วันไหนเนสหยุดเป็นคนอื่นรับแทน
-  var commissionTo = String(req.commissionTo || staffOnShift[0] || '').trim();
-  if (commissionTo && commissionTotal > 0) {
-    appendRowObj(SHEET_TABS.COMMISSION, {
-      Date: date, Staff_Name: commissionTo,
-      Cups_Share: cups,
-      Amount: commissionTotal,
-      Note: cups + ' แก้ว × ' + rate + ' บาท',
-    });
-  }
-  record.Commission_To = commissionTo; // ส่งต่อให้ flex/แอป (ไม่ใช่คอลัมน์ใน Sheet)
+  // ค่าคอมไม่ผูกกับการปิดยอดแล้ว — ผู้บริหาร/เจ้าของเลือกจ่ายทีหลังในหน้า "จ่ายค่าคอม"
+  // (ยอด Commission_Cups/Total ยังคำนวณเก็บไว้ในแถวเป็นฐานให้หน้าหลังบ้านใช้)
 
   // ส่ง infographic เข้ากลุ่ม LINE
   var push = pushDailySummary(record, categories, premiumItems, config);
@@ -956,29 +958,10 @@ function buildDailyFlex(record, categories, premiumItems, config) {
     ], premRows);
   }
 
+  // (ค่าคอมเป็นเรื่องหลังบ้าน — ไม่แสดงบนการ์ดในกลุ่ม)
   body = body.concat([
     { type: 'separator', margin: 'lg', color: '#4A3826' },
-  ], extraRows, [
-    // ค่าคอม
-    {
-      type: 'box', layout: 'vertical', margin: 'lg', paddingAll: '12px',
-      backgroundColor: C.card, cornerRadius: 'lg',
-      contents: [
-        {
-          type: 'box', layout: 'horizontal',
-          contents: [
-            { type: 'text', text: '🥤 ค่าคอมเครื่องดื่ม', size: 'sm', color: C.cream, flex: 6 },
-            { type: 'text', text: fmtMoney(record.Commission_Total) + ' ฿', size: 'sm', weight: 'bold', color: C.gold, align: 'end', flex: 4 },
-          ],
-        },
-        {
-          type: 'text', size: 'xxs', color: C.dim, margin: 'sm', wrap: true,
-          text: num(record.Commission_Cups) + ' แก้ว × ' + num(record.Commission_Rate) + ' บาท' +
-            (record.Commission_To ? ' → ' + record.Commission_To : ''),
-        },
-      ],
-    },
-  ]);
+  ], extraRows);
 
   if (record.Note) {
     body.push({ type: 'text', text: '📝 ' + record.Note, size: 'xs', color: C.dim, margin: 'md', wrap: true });
@@ -1002,7 +985,7 @@ function buildDailyFlex(record, categories, premiumItems, config) {
         type: 'box', layout: 'vertical', paddingAll: '12px', backgroundColor: C.bg,
         contents: [{
           type: 'text', size: 'xxs', color: C.dim, align: 'center',
-          text: 'ปิดยอดโดย ' + record.Submitted_By + ' · เข้ากะ: ' + (record.Staff_On_Shift || '-'),
+          text: 'ปิดยอดโดย ' + record.Submitted_By,
           wrap: true,
         }],
       },
@@ -1022,6 +1005,139 @@ function kvRow(label, value, C) {
 
 function safeParse(json) {
   try { return JSON.parse(json) || {}; } catch (e) { return {}; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ค่าคอม (หลังบ้าน) — manager/owner เลือกจ่าย + ยืนยันจ่ายผ่านพร้อมเพย์
+// ═══════════════════════════════════════════════════════════════
+
+function actionGetCommissionAdmin(req) {
+  requireRole(req, 'manager');
+  var month = String(req.month || '');
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('รูปแบบเดือนไม่ถูกต้อง');
+
+  var days = readRows(SHEET_TABS.DAILY).filter(function (r) {
+    return dateKey(r.Date).indexOf(month) === 0;
+  }).map(function (r) {
+    return {
+      date: dateKey(r.Date),
+      cups: num(r.Commission_Cups),
+      amount: num(r.Commission_Total),
+      submittedBy: r.Submitted_By,
+    };
+  });
+
+  var pays = readRows(SHEET_TABS.COM_PAY).filter(function (r) {
+    return dateKey(r.Date).indexOf(month) === 0;
+  }).map(function (r) {
+    return {
+      date: dateKey(r.Date), staffName: r.Staff_Name, amount: num(r.Amount),
+      status: r.Status, paidAt: r.Paid_At, paidBy: r.Paid_By,
+    };
+  });
+
+  var staffPay = {};
+  readRows(SHEET_TABS.STAFF_PAY).forEach(function (r) { staffPay[r.Staff_Name] = String(r.PromptPay || ''); });
+
+  var staffNames = readRows(SHEET_TABS.STAFF)
+    .filter(function (s) { return isTrue(s.Active) && s.Role !== 'owner'; })
+    .map(function (s) { return { name: s.Name, nickname: s.Nickname }; });
+
+  return { days: days, pays: pays, staffPay: staffPay, staffNames: staffNames };
+}
+
+function findComPayRow(date) {
+  var rows = readRows(SHEET_TABS.COM_PAY);
+  for (var i = rows.length - 1; i >= 0; i--) {
+    if (dateKey(rows[i].Date) === date) return rows[i];
+  }
+  return null;
+}
+
+/** เลือกว่าค่าคอมของวันนี้เป็นของใคร (ยังไม่ถือว่าจ่าย) */
+function actionAssignCommission(req) {
+  requireRole(req, 'manager');
+  var date = String(req.date || '');
+  var staffName = String(req.staffName || '').trim();
+  if (!staffName) throw new Error('เลือกพนักงานก่อน');
+
+  var daily = readRows(SHEET_TABS.DAILY).filter(function (r) { return dateKey(r.Date) === date; });
+  if (!daily.length) throw new Error('ไม่พบยอดของวันที่นี้');
+  var amount = num(daily[daily.length - 1].Commission_Total);
+
+  var existing = findComPayRow(date);
+  if (existing) {
+    if (existing.Status === 'paid') throw new Error('วันนี้จ่ายไปแล้ว (' + existing.Staff_Name + ') แก้ได้ในแท็บ CommissionPay');
+    existing.Staff_Name = staffName;
+    existing.Amount = amount;
+    var keep = existing._rowIndex;
+    delete existing._rowIndex;
+    updateRowObj(SHEET_TABS.COM_PAY, keep, existing);
+  } else {
+    appendRowObj(SHEET_TABS.COM_PAY, {
+      Date: date, Staff_Name: staffName, Amount: amount,
+      Status: 'unpaid', Paid_At: '', Paid_By: '', Note: '',
+    });
+  }
+  return { date: date, staffName: staffName, amount: amount };
+}
+
+function actionPayCommission(req) {
+  var staff = requireRole(req, 'manager');
+  var row = findComPayRow(String(req.date || ''));
+  if (!row) throw new Error('ยังไม่ได้เลือกคนรับของวันนี้');
+  row.Status = 'paid';
+  row.Paid_At = new Date();
+  row.Paid_By = staff.Name;
+  var keep = row._rowIndex;
+  delete row._rowIndex;
+  updateRowObj(SHEET_TABS.COM_PAY, keep, row);
+  return { paid: true };
+}
+
+/** จ่ายรวมทุกวันที่ค้างของพนักงานคนหนึ่งในเดือนนั้น */
+function actionPayAllCommission(req) {
+  var staff = requireRole(req, 'manager');
+  var month = String(req.month || '');
+  var staffName = String(req.staffName || '');
+  var rows = readRows(SHEET_TABS.COM_PAY).filter(function (r) {
+    return r.Staff_Name === staffName && r.Status === 'unpaid' &&
+      dateKey(r.Date).indexOf(month) === 0;
+  });
+  if (!rows.length) throw new Error('ไม่มียอดค้างจ่ายของ ' + staffName);
+  var total = 0;
+  rows.forEach(function (r) {
+    total += num(r.Amount);
+    r.Status = 'paid';
+    r.Paid_At = new Date();
+    r.Paid_By = staff.Name;
+    var keep = r._rowIndex;
+    delete r._rowIndex;
+    updateRowObj(SHEET_TABS.COM_PAY, keep, r);
+  });
+  return { paid: true, days: rows.length, total: total };
+}
+
+/** บันทึกพร้อมเพย์ของพนักงาน (ใช้สร้างลิงก์จ่ายเงิน) */
+function actionSaveStaffPay(req) {
+  requireRole(req, 'manager');
+  var staffName = String(req.staffName || '').trim();
+  var promptpay = String(req.promptpay || '').replace(/[^0-9]/g, '');
+  if (!staffName) throw new Error('ไม่พบชื่อพนักงาน');
+  if (promptpay.length < 10) throw new Error('เบอร์พร้อมเพย์ไม่ถูกต้อง (10-13 หลัก)');
+
+  var rows = readRows(SHEET_TABS.STAFF_PAY);
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].Staff_Name === staffName) {
+      rows[i].PromptPay = promptpay;
+      var keep = rows[i]._rowIndex;
+      delete rows[i]._rowIndex;
+      updateRowObj(SHEET_TABS.STAFF_PAY, keep, rows[i]);
+      return { saved: true };
+    }
+  }
+  appendRowObj(SHEET_TABS.STAFF_PAY, { Staff_Name: staffName, PromptPay: promptpay, Note: '' });
+  return { saved: true };
 }
 
 // ═══════════════════════════════════════════════════════════════
