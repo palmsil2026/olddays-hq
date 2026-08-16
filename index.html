@@ -355,6 +355,8 @@
     </div>
 
     <div class="card">
+      <div class="card-title">👥 วันนี้ใครมาบ้าง (บันทึกไว้ดูย้อนหลังเฉย ๆ)</div>
+      <div class="chips" id="dcStaffChips"></div>
       <label class="fl">หมายเหตุ</label>
       <textarea id="dcNote" placeholder="เช่น ฝนตก คนน้อย / มีอีเวนต์"></textarea>
       <button class="btn" id="btnSubmitClose" onclick="submitDailyClose(false)">✅ ปิดยอด + ส่งสรุปเข้ากลุ่ม</button>
@@ -576,6 +578,11 @@ function thaiDate(iso) {
   return num(p[2]) + '/' + num(p[1]) + '/' + (num(p[0]) + 543);
 }
 function myLevel() { return me ? (ROLE_LEVEL[me.Role] || 0) : 0; }
+// แสดงชื่อเล่นแทนชื่อจริงทุกที่ในแอป (ชื่อจริงเก็บเป็น key ใน Sheet เท่านั้น)
+function nickOf(name) {
+  const s = staffList.find(x => x.name === name);
+  return (s && s.nickname) || name;
+}
 
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -720,7 +727,7 @@ async function loadDashboard() {
     if (d.record) {
       $('todayStatus').innerHTML =
         '<span class="badge ok">ปิดยอดแล้ว</span> ยอดขาย <b style="color:var(--gold)">' +
-        money(d.record.Total_Sales) + ' ฿</b> โดย ' + esc(d.record.Submitted_By);
+        money(d.record.Total_Sales) + ' ฿</b> โดย ' + esc(nickOf(d.record.Submitted_By));
     } else {
       $('todayStatus').innerHTML =
         '<span class="badge pending">ยังไม่ปิดยอด</span> <span class="muted">สิ้นวันอย่าลืมกดปิดยอดที่แท็บ 🧾</span>';
@@ -780,6 +787,12 @@ async function quickApprove(sid) {
 // ══════════════════════════════════════════
 function buildCloseForm() {
   $('dcDate').value = todayISO();
+
+  // ชิปเข้ากะ (บันทึกเฉย ๆ ไม่เกี่ยวค่าคอม) — ใช้ชื่อเล่น เจ้าของไม่นับ
+  $('dcStaffChips').innerHTML = staffList.filter(s => s.role !== 'owner').map(s => {
+    const label = s.nickname || s.name;
+    return '<div class="chip" data-name="' + esc(label) + '" onclick="this.classList.toggle(\'on\')">' + esc(label) + '</div>';
+  }).join('');
 
   $('dcCategories').innerHTML = categories.map(c =>
     counterRow('cat', c.Category_ID, (c.Emoji ? c.Emoji + ' ' : '') + c.Name, c.Unit)).join('');
@@ -852,17 +865,17 @@ async function checkExistingClose() {
   el.style.display = 'none';
   try {
     const d = await api({ action: 'getDailyClose', date: $('dcDate').value });
-    if (!d.record) return;
+    if (!d.record) { resetCloseForm(); return; }
+    // มีข้อมูลของวันนี้อยู่แล้ว → เติมตัวเลขคาไว้เสมอ ใช้เปิดดูย้อนหลังได้ในตัว
+    prefillFromRecord(d.record);
+    el.style.display = 'block';
     if (d.record.Submitted_By === AUTO_SUBMITTER) {
-      // ฉบับร่างจากอีเมล POS — เติมตัวเลขให้เรียบร้อยแล้ว
-      prefillFromRecord(d.record);
       el.className = 'vbanner ok';
-      el.style.display = 'block';
       el.textContent = '📩 ยอดจาก POS เข้ามาแล้ว เติมตัวเลขให้เรียบร้อย — ตรวจดูแล้วกดปิดยอดได้เลย';
     } else {
-      el.style.display = 'block';
-      el.textContent = 'วันที่นี้ปิดยอดไปแล้วโดย ' + d.record.Submitted_By +
-        ' (' + money(d.record.Total_Sales) + ' ฿) — ส่งอีกครั้งจะเป็นการแก้ทับ';
+      el.className = 'vbanner warn';
+      el.textContent = '✅ วันนี้ปิดยอดแล้วโดย ' + nickOf(d.record.Submitted_By) +
+        ' — ดูได้เลย ถ้าแก้ตัวเลขแล้วกดส่งจะเป็นการบันทึกทับ';
     }
   } catch (e) { /* เงียบไว้ ไม่ใช่เรื่องคอขาดบาดตาย */ }
 }
@@ -884,10 +897,13 @@ function prefillFromRecord(r) {
       if (input) input.value = num(counts[id]);
     });
   } catch (e) {}
+  // ชิปเข้ากะตามที่บันทึกไว้
+  const onShift = String(r.Staff_On_Shift || '').split(',').map(s => s.trim()).filter(Boolean);
+  document.querySelectorAll('#dcStaffChips .chip').forEach(c =>
+    c.classList.toggle('on', onShift.includes(c.dataset.name)));
   // เก็บ note จาก POS ไว้ (ตัด prefix ออกให้อ่านง่าย)
-  if (r.Note) $('dcNote').value = String(r.Note).replace(/^📩 ดึงจากอีเมล POS \| /, '');
+  $('dcNote').value = r.Note ? String(r.Note).replace(/^📩 ดึงจากอีเมล POS \| /, '') : '';
   validateMoney();
-  updateCommission();
 }
 
 async function submitDailyClose(confirmOverwrite) {
@@ -946,7 +962,8 @@ function resetCloseForm() {
   ['dcTotal', 'dcCash', 'dcTct', 'dcTransfer', 'dcCashOver', 'dcDiscCount', 'dcDiscTotal',
     'dcVoidCount', 'dcVoidTotal', 'dcNote'].forEach(id => { $(id).value = ''; });
   document.querySelectorAll('#dcCategories input, #dcPremium input').forEach(i => { i.value = 0; });
-  updateCommission();
+  document.querySelectorAll('#dcStaffChips .chip').forEach(c => c.classList.remove('on'));
+  $('moneyBanner').className = 'vbanner';
 }
 
 function renderCloseDone(data) {
@@ -1232,7 +1249,7 @@ async function loadComAdmin() {
     });
     $('comSummary').innerHTML = Object.keys(unpaidBy).length
       ? Object.keys(unpaidBy).map(name =>
-          '<div class="list-row"><div class="list-main"><div class="list-title">' + esc(name) + '</div>' +
+          '<div class="list-row"><div class="list-main"><div class="list-title">' + esc(nickOf(name)) + '</div>' +
           '<div class="list-sub">ค้างจ่ายรวม</div></div>' +
           '<b style="color:var(--gold)">' + money(unpaidBy[name]) + ' ฿</b>' +
           '<button class="btn small green" onclick="openPayAll(\'' + esc(name) + '\')">💸 จ่ายรวม</button></div>'
@@ -1250,10 +1267,10 @@ async function loadComAdmin() {
           '<div class="chip" onclick="assignCom(\'' + day.date + '\',\'' + esc(s.name) + '\')">' +
           esc(s.nickname || s.name) + '</div>').join('') + '</div>';
       } else if (p.status === 'unpaid') {
-        right = '<span class="badge pending">' + esc(p.staffName) + '</span> ' +
+        right = '<span class="badge pending">' + esc(nickOf(p.staffName)) + '</span> ' +
           '<button class="btn small green" onclick="openPayDay(\'' + day.date + '\')">💸 จ่าย</button>';
       } else {
-        right = '<span class="badge approved">✓ จ่ายแล้ว → ' + esc(p.staffName) + '</span>';
+        right = '<span class="badge approved">✓ จ่ายแล้ว → ' + esc(nickOf(p.staffName)) + '</span>';
       }
       return '<div class="list-row"><div class="list-main">' +
         '<div class="list-title">' + thaiDate(day.date) + ' · <b style="color:var(--gold)">' + money(day.amount) + ' ฿</b></div>' +
@@ -1294,7 +1311,7 @@ function openPayDay(date) {
   if (!p) return;
   payCtx = { mode: 'day', date, name: p.staffName, amount: p.amount };
   $('payTitle').textContent = '💸 จ่ายค่าคอม ' + thaiDate(date);
-  $('paySub').textContent = p.staffName;
+  $('paySub').textContent = nickOf(p.staffName);
   $('payAmount').textContent = money(p.amount);
   $('payPpBox').innerHTML = ppLinkHTML(p.staffName, p.amount);
   $('payModalBg').classList.add('show');
@@ -1306,7 +1323,7 @@ function openPayAll(name) {
   if (!total) return;
   payCtx = { mode: 'all', name, month: $('comMonth').value, amount: total, days: unpaid.length };
   $('payTitle').textContent = '💸 จ่ายรวม ' + unpaid.length + ' วัน';
-  $('paySub').textContent = name;
+  $('paySub').textContent = nickOf(name);
   $('payAmount').textContent = money(total);
   $('payPpBox').innerHTML = ppLinkHTML(name, total);
   $('payModalBg').classList.add('show');
@@ -1369,7 +1386,8 @@ async function loadReport() {
           const isAuto = day.Submitted_By === AUTO_SUBMITTER;
           return '<div class="list-row" style="cursor:pointer" onclick="showDayDetail(' + i + ')">' +
             '<div class="list-main"><div class="list-title">' + thaiDate(String(day.Date).slice(0, 10)) + '</div>' +
-            '<div class="list-sub">' + (isAuto ? '📩 รอยืนยัน' : 'ปิดโดย ' + esc(day.Submitted_By)) + '</div></div>' +
+            '<div class="list-sub">' + (isAuto ? '📩 รอยืนยัน' : 'ปิดโดย ' + esc(nickOf(day.Submitted_By))) +
+            (day.Staff_On_Shift ? ' · 👥 ' + esc(day.Staff_On_Shift) : '') + '</div></div>' +
             '<b style="color:var(--gold)">' + money(day.Total_Sales) + ' ฿</b></div>';
         }).join('')
       : '';
@@ -1447,8 +1465,8 @@ function showDayDetail(i) {
 
   html += '<div class="divider"></div>' +
     '<div class="sum-row"><span class="muted">ส่วนลด</span><span>' + num(r.Discount_Count) + ' รายการ / ' + money(r.Discount_Total) + ' ฿</span></div>' +
-    '<div class="sum-row"><span class="muted">บิล Void</span><span>' + num(r.Void_Count) + ' บิล</span></div>' +
-    '';
+    '<div class="sum-row"><span class="muted">บิล Void</span><span>' + num(r.Void_Count) + ' บิล</span></div>';
+  if (r.Staff_On_Shift) html += '<div class="sum-row"><span class="muted">👥 คนเข้าวันนี้</span><span>' + esc(r.Staff_On_Shift) + '</span></div>';
   if (r.Note) html += '<div class="sum-row"><span class="muted" style="font-size:12px">📝 ' + esc(r.Note) + '</span></div>';
 
   $('dayModalContent').innerHTML = html;

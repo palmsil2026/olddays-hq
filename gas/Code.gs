@@ -829,12 +829,24 @@ function notifyGroup(text) {
   return linePush(cred, [{ type: 'text', text: text }]);
 }
 
+/** ชื่อเล่นจากชื่อจริง (ชื่อจริงเป็น key ใน Sheet — การแสดงผลใช้ชื่อเล่นให้เป็นกันเอง) */
+function nickOf(name) {
+  try {
+    var rows = readRows(SHEET_TABS.STAFF);
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].Name === name && rows[i].Nickname) return String(rows[i].Nickname);
+    }
+  } catch (e) {}
+  return String(name || '');
+}
+
 function pushDailySummary(record, categories, premiumItems, config) {
   var cred = getLineCredentials();
   if (!cred.token || !cred.groupId) {
     return { pushed: false, error: 'ยังไม่ได้ตั้งค่า LINE bot (token/groupId)' };
   }
-  var flex = buildDailyFlex(record, categories, premiumItems, config);
+  var display = Object.assign({}, record, { Submitted_By: nickOf(record.Submitted_By) });
+  var flex = buildDailyFlex(display, categories, premiumItems, config);
   return linePush(cred, [flex]);
 }
 
@@ -985,7 +997,8 @@ function buildDailyFlex(record, categories, premiumItems, config) {
         type: 'box', layout: 'vertical', paddingAll: '12px', backgroundColor: C.bg,
         contents: [{
           type: 'text', size: 'xxs', color: C.dim, align: 'center',
-          text: 'ปิดยอดโดย ' + record.Submitted_By,
+          text: 'ปิดยอดโดย ' + record.Submitted_By +
+            (record.Staff_On_Shift ? ' · 👥 ' + record.Staff_On_Shift : ''),
           wrap: true,
         }],
       },
