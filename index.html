@@ -1462,6 +1462,8 @@ function showDayDetail(i) {
     });
   } catch (e) {}
   if (catHtml) html += '<div class="divider"></div>' + catHtml;
+  html += '<div class="sum-row"><span class="muted">🥤 เครื่องดื่มรวม</span>' +
+    '<b style="color:var(--gold)">' + num(r.Commission_Cups) + ' แก้ว</b></div>';
 
   html += '<div class="divider"></div>' +
     '<div class="sum-row"><span class="muted">ส่วนลด</span><span>' + num(r.Discount_Count) + ' รายการ / ' + money(r.Discount_Total) + ' ฿</span></div>' +
