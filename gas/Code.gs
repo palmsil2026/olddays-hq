@@ -1046,13 +1046,13 @@ function setupImportTrigger() {
   return importDrawerReports();
 }
 
-/** ปุ่มในแอป: ดึงตอนนี้เลย */
+/** ปุ่มในแอป: ดึงตอนนี้เลย — force = ดึงซ้ำอีเมลเดิมด้วย (ทับได้เฉพาะฉบับร่างอัตโนมัติ ไม่แตะของคน) */
 function actionImportFromGmail(req) {
   requireStaff(req);
-  return importDrawerReports();
+  return importDrawerReports(true);
 }
 
-function importDrawerReports() {
+function importDrawerReports(force) {
   ensureSetup();
   var doneIds = {};
   readRows(SHEET_TABS.IMPORT_LOG).forEach(function (r) { doneIds[r.Message_ID] = true; });
@@ -1062,7 +1062,7 @@ function importDrawerReports() {
   threads.forEach(function (th) {
     th.getMessages().forEach(function (msg) {
       var id = msg.getId();
-      if (doneIds[id]) return;
+      if (!force && doneIds[id]) return;
       var status;
       var parsed = null;
       try {
@@ -1071,12 +1071,14 @@ function importDrawerReports() {
       } catch (e) {
         status = 'error: ' + e.message;
       }
-      appendRowObj(SHEET_TABS.IMPORT_LOG, {
-        Message_ID: id,
-        Date: parsed && parsed.date ? parsed.date : '',
-        Imported_At: new Date(),
-        Status: status,
-      });
+      if (!doneIds[id]) {
+        appendRowObj(SHEET_TABS.IMPORT_LOG, {
+          Message_ID: id,
+          Date: parsed && parsed.date ? parsed.date : '',
+          Imported_At: new Date(),
+          Status: status,
+        });
+      }
       results.push({ date: parsed && parsed.date, status: status });
     });
   });
@@ -1116,16 +1118,46 @@ function parseDrawerReport(text) {
   }
 
   // ── หมวดขาย: ระหว่าง "Sales by Category" ถึง "Sub Total" ──
+  // GAS getPlainBody() แปลงตาราง HTML ได้หลายแบบ ต้องรองรับทั้ง:
+  //   1) "| SIGNATURE | 1 | 90.00 |"   2) "SIGNATURE 1 90.00"
+  //   3) ชื่อกับตัวเลขแยกคนละบรรทัด
+  var isNumLike = function (s) { return /^[-\d,.\s]+$/.test(String(s).trim()); };
+  var numClean = function (s) { return num(String(s).replace(/,/g, '')); };
   var categories = [];
   var inCat = false;
+  var pendName = null, pendNums = [];
+  var flushPending = function () {
+    if (pendName && pendNums.length >= 2) {
+      categories.push({ name: pendName, count: pendNums[0], amount: pendNums[1] });
+    }
+    pendName = null; pendNums = [];
+  };
   for (var i = 0; i < lines.length; i++) {
     if (lines[i].indexOf('Sales by Category') !== -1) { inCat = true; continue; }
     if (!inCat) continue;
-    if (lines[i].indexOf('Sub Total') !== -1) break;
-    var parts = lines[i].split('|').map(function (p) { return p.trim(); }).filter(Boolean);
-    if (parts.length >= 3) {
-      categories.push({ name: parts[0], count: num(parts[1].replace(/,/g, '')), amount: num(parts[2].replace(/,/g, '')) });
+    if (lines[i].indexOf('Sub Total') !== -1) { flushPending(); break; }
+    var line = lines[i];
+    if (!line) continue;
+
+    var parts = line.split('|').map(function (p) { return p.trim(); }).filter(Boolean);
+    if (parts.length >= 3 && !isNumLike(parts[0]) && isNumLike(parts[1]) && isNumLike(parts[2])) {
+      flushPending();
+      categories.push({ name: parts[0], count: numClean(parts[1]), amount: numClean(parts[2]) });
+      continue;
     }
+    var m = line.match(/^(.+?)\s+(\d[\d,]*)\s+(-?[\d,]+\.\d{1,2})\s*$/);
+    if (m && !isNumLike(m[1])) {
+      flushPending();
+      categories.push({ name: m[1].trim(), count: numClean(m[2]), amount: numClean(m[3]) });
+      continue;
+    }
+    if (isNumLike(line)) {
+      if (pendName) pendNums.push(numClean(line));
+      continue;
+    }
+    // ข้อความล้วน = ชื่อหมวด (ฟอร์แมตแยกบรรทัด)
+    flushPending();
+    pendName = line.replace(/\|/g, '').trim();
   }
 
   var discount = lastTwoNums(findLine('Sub.TTL DC'));
