@@ -120,6 +120,7 @@
     .badge.approved  { background: #2E4132; color: var(--green); }
     .badge.rejected  { background: #46282A; color: var(--red); }
     .badge.purchased { background: #2A3A46; color: var(--blue); }
+    .badge.cancelled { background: #3A332C; color: var(--dim); }
     .badge.low       { background: #46282A; color: var(--red); }
     .badge.ok        { background: #2E4132; color: var(--green); }
 
@@ -483,6 +484,8 @@
       <div class="chip" data-move="out" onclick="pickMoveType(this)">📤 ตัดออก</div>
       <div class="chip" data-move="count" onclick="pickMoveType(this)">🔢 นับสต๊อก</div>
     </div>
+    <button class="btn small danger hidden" id="btnDisableIng" style="margin-top:12px;"
+      onclick="disableIngredient(this)">🗑 เลิกใช้วัตถุดิบนี้</button>
     <label class="fl" id="smQtyLabel">จำนวน</label>
     <input type="number" id="smQty" inputmode="decimal" step="0.01" placeholder="0" />
     <label class="fl">หมายเหตุ</label>
@@ -1084,7 +1087,27 @@ function openStockModal(sid) {
   document.querySelectorAll('#stockModalBg .chip').forEach(c => c.classList.toggle('on', c.dataset.move === 'in'));
   moveType = 'in';
   $('smQtyLabel').textContent = 'จำนวนที่รับเข้า';
+  $('btnDisableIng').classList.toggle('hidden', myLevel() < ROLE_LEVEL.manager);
+  $('btnDisableIng').dataset.armed = '';
+  $('btnDisableIng').textContent = '🗑 เลิกใช้วัตถุดิบนี้';
   $('stockModalBg').classList.add('show');
+}
+
+// เลิกใช้วัตถุดิบ (เพิ่มผิด/เลิกขาย) — กด 2 ครั้งกันมือลั่น ประวัติใน Sheet ยังอยู่
+async function disableIngredient(btn) {
+  if (!currentIngredient) return;
+  if (btn.dataset.armed !== '1') {
+    btn.dataset.armed = '1';
+    btn.textContent = 'แน่ใจ? กดอีกทีเพื่อเลิกใช้ "' + currentIngredient.Name + '"';
+    setTimeout(() => { btn.dataset.armed = ''; btn.textContent = '🗑 เลิกใช้วัตถุดิบนี้'; }, 3500);
+    return;
+  }
+  try {
+    await api({ action: 'disableIngredient', ingredientId: currentIngredient.Ingredient_ID });
+    closeStockModal();
+    showToast('เลิกใช้ "' + currentIngredient.Name + '" แล้ว (ประวัติยังอยู่ใน Sheet)');
+    loadStock();
+  } catch (e) { showToast(e.message, 4000); }
 }
 function closeStockModal() { $('stockModalBg').classList.remove('show'); }
 
@@ -1135,17 +1158,30 @@ async function loadPurchases() {
   try {
     const d = await api({ action: 'getPurchases' });
     poCache = d.purchases || [];
-    const statusTh = { pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ไม่อนุมัติ', purchased: 'ซื้อแล้ว' };
+    const statusTh = { pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ไม่อนุมัติ', purchased: 'ซื้อแล้ว', cancelled: 'ยกเลิกแล้ว' };
     $('poList').innerHTML = poCache.map(p => {
       const sid = safeId(p.Purchase_ID);
+      const isMgr = myLevel() >= ROLE_LEVEL.manager;
+      const isMine = me && p.Requested_By === me.Name;
       let actions = '';
-      if (p.Status === 'pending' && myLevel() >= ROLE_LEVEL.manager) {
-        actions = '<div style="margin-top:8px;display:flex;gap:8px;">' +
-          '<button class="btn small green" onclick="updatePo(\'' + sid + '\',\'approved\')">อนุมัติ</button>' +
-          '<button class="btn small danger" onclick="updatePo(\'' + sid + '\',\'rejected\')">ไม่อนุมัติ</button></div>';
+      if (p.Status === 'pending') {
+        let btns = '';
+        if (isMgr) {
+          btns += '<button class="btn small green" onclick="updatePo(\'' + sid + '\',\'approved\')">อนุมัติ</button>' +
+            '<button class="btn small danger" onclick="updatePo(\'' + sid + '\',\'rejected\')">ไม่อนุมัติ</button>';
+        }
+        if (isMine || isMgr) {
+          btns += '<button class="btn small secondary" onclick="updatePo(\'' + sid + '\',\'cancelled\')">ถอนคำขอ</button>';
+        }
+        if (btns) actions = '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">' + btns + '</div>';
       } else if (p.Status === 'approved') {
+        actions = '<div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;" id="pf-' + sid + '">' +
+          '<button class="btn small" onclick="showActualCost(\'' + sid + '\')">💰 ซื้อแล้ว บันทึกยอดจริง</button>' +
+          (isMgr ? '<button class="btn small secondary" onclick="updatePo(\'' + sid + '\',\'unapprove\')">↩︎ ถอนอนุมัติ</button>' : '') +
+          '</div>';
+      } else if (p.Status === 'purchased' && isMgr) {
         actions = '<div style="margin-top:8px;display:flex;gap:8px;align-items:center;" id="pf-' + sid + '">' +
-          '<button class="btn small" onclick="showActualCost(\'' + sid + '\')">💰 ซื้อแล้ว บันทึกยอดจริง</button></div>';
+          '<button class="btn small secondary" onclick="showActualCost(\'' + sid + '\')">✏️ แก้ยอดจริง</button></div>';
       }
       return '<div class="list-row"><div class="list-main">' +
         '<div class="list-title">' + esc(p.Items) + '</div>' +
@@ -1174,9 +1210,10 @@ async function createPurchase() {
 async function updatePo(sid, status) {
   try {
     await api({ action: 'updatePurchase', purchaseId: realPoId(sid), status });
-    showToast(status === 'approved' ? 'อนุมัติแล้ว ✓' : 'ปฏิเสธแล้ว');
+    const msg = { approved: 'อนุมัติแล้ว ✓', rejected: 'ปฏิเสธแล้ว', cancelled: 'ถอนคำขอแล้ว', unapprove: 'ถอนอนุมัติแล้ว ↩︎' };
+    showToast(msg[status] || 'บันทึกแล้ว ✓');
     loadPurchases();
-  } catch (e) { showToast(e.message); }
+  } catch (e) { showToast(e.message, 4000); }
 }
 
 // prompt() โดนบล็อกใน LINE webview บางเครื่อง → ใช้ input ในแถวแทน
@@ -1231,13 +1268,24 @@ function initMoreTab() {
 let comState = null;
 let payCtx = null;
 
+let comReassignDate = null; // วันที่กำลังกด "เปลี่ยนคน" อยู่
+
 async function loadComAdmin() {
   const month = $('comMonth').value;
   if (!month) return;
   $('comDays').textContent = 'กำลังโหลด...';
+  comReassignDate = null;
   try {
-    const d = await api({ action: 'getCommissionAdmin', month });
-    comState = d;
+    comState = await api({ action: 'getCommissionAdmin', month });
+    renderComAdmin();
+  } catch (e) {
+    $('comDays').textContent = e.message;
+  }
+}
+
+function renderComAdmin() {
+  const d = comState;
+  {
     const payByDate = {};
     (d.pays || []).forEach(p => { payByDate[p.date] = p; });
 
@@ -1261,25 +1309,46 @@ async function loadComAdmin() {
       .sort((a, b) => b.date.localeCompare(a.date));
     $('comDays').innerHTML = days.length ? days.map(day => {
       const p = payByDate[day.date];
+      const staffChips = '<div class="chips">' + (d.staffNames || []).map(s =>
+        '<div class="chip" onclick="assignCom(\'' + day.date + '\',\'' + esc(s.name) + '\')">' +
+        esc(s.nickname || s.name) + '</div>').join('') + '</div>';
       let right;
-      if (!p) {
-        right = '<div class="chips">' + (d.staffNames || []).map(s =>
-          '<div class="chip" onclick="assignCom(\'' + day.date + '\',\'' + esc(s.name) + '\')">' +
-          esc(s.nickname || s.name) + '</div>').join('') + '</div>';
+      if (!p || comReassignDate === day.date) {
+        right = staffChips; // ยังไม่เลือกคน หรือกำลังกดเปลี่ยนคนอยู่
       } else if (p.status === 'unpaid') {
         right = '<span class="badge pending">' + esc(nickOf(p.staffName)) + '</span> ' +
-          '<button class="btn small green" onclick="openPayDay(\'' + day.date + '\')">💸 จ่าย</button>';
+          '<button class="btn small green" onclick="openPayDay(\'' + day.date + '\')">💸 จ่าย</button> ' +
+          '<button class="btn small secondary" onclick="reassignCom(\'' + day.date + '\')">เปลี่ยนคน</button>';
       } else {
-        right = '<span class="badge approved">✓ จ่ายแล้ว → ' + esc(nickOf(p.staffName)) + '</span>';
+        right = '<span class="badge approved">✓ จ่ายแล้ว → ' + esc(nickOf(p.staffName)) + '</span> ' +
+          '<button class="btn small danger" onclick="unpayCom(\'' + day.date + '\', this)">↩︎</button>';
       }
       return '<div class="list-row"><div class="list-main">' +
         '<div class="list-title">' + thaiDate(day.date) + ' · <b style="color:var(--gold)">' + money(day.amount) + ' ฿</b></div>' +
         '<div class="list-sub">' + day.cups + ' แก้ว</div></div>' +
         '<div style="text-align:right;">' + right + '</div></div>';
     }).join('') : '<span class="muted">เดือนนี้ยังไม่มียอดค่าคอม</span>';
-  } catch (e) {
-    $('comDays').textContent = e.message;
   }
+}
+
+function reassignCom(date) {
+  comReassignDate = date;
+  renderComAdmin();
+}
+
+// ยกเลิกสถานะจ่ายแล้ว — กด 2 ครั้งกันมือลั่น
+async function unpayCom(date, btn) {
+  if (btn.dataset.armed !== '1') {
+    btn.dataset.armed = '1';
+    btn.textContent = 'แน่ใจ?';
+    setTimeout(() => { btn.dataset.armed = ''; btn.textContent = '↩︎'; }, 3000);
+    return;
+  }
+  try {
+    await api({ action: 'unpayCommission', date });
+    showToast('ยกเลิกจ่ายแล้ว — กลับเป็นค้างจ่าย เลือกคน/จ่ายใหม่ได้เลย');
+    loadComAdmin();
+  } catch (e) { showToast(e.message, 4000); }
 }
 
 async function assignCom(date, staffName) {
@@ -1290,17 +1359,25 @@ async function assignCom(date, staffName) {
   } catch (e) { showToast(e.message, 4000); }
 }
 
+function ppEditHTML(name) {
+  return '<label class="fl">พร้อมเพย์ของ ' + esc(nickOf(name)) + ' — กรอกครั้งเดียว ระบบจำให้</label>' +
+    '<div style="display:flex;gap:8px;">' +
+    '<input type="text" id="ppInput" inputmode="numeric" placeholder="เบอร์/เลขพร้อมเพย์" style="flex:1;" />' +
+    '<button class="btn small" onclick="savePp(\'' + esc(name) + '\')">บันทึก</button></div>';
+}
+
+function editPp(name) {
+  $('payPpBox').innerHTML = ppEditHTML(name);
+  $('ppInput').focus();
+}
+
 function ppLinkHTML(name, amount) {
   const pp = (comState && comState.staffPay && comState.staffPay[name]) || '';
-  if (!pp) {
-    return '<label class="fl">ยังไม่มีพร้อมเพย์ของ ' + esc(name) + ' — กรอกครั้งเดียว ระบบจำให้</label>' +
-      '<div style="display:flex;gap:8px;">' +
-      '<input type="text" id="ppInput" inputmode="numeric" placeholder="เบอร์/เลขพร้อมเพย์" style="flex:1;" />' +
-      '<button class="btn small" onclick="savePp(\'' + esc(name) + '\')">บันทึก</button></div>';
-  }
+  if (!pp) return ppEditHTML(name);
   const link = 'https://promptpay.io/' + pp + '/' + amount;
   return '<div class="divider"></div>' +
-    '<div class="sum-row"><span class="muted">พร้อมเพย์ ' + esc(name) + '</span><b>' + esc(pp) + '</b></div>' +
+    '<div class="sum-row"><span class="muted">พร้อมเพย์ ' + esc(nickOf(name)) + '</span>' +
+    '<span><b>' + esc(pp) + '</b> <button class="btn small secondary" onclick="editPp(\'' + esc(name) + '\')">✏️</button></span></div>' +
     '<a href="' + link + '" target="_blank" rel="noopener" class="btn" ' +
     'style="text-align:center;text-decoration:none;display:block;">📲 เปิด QR จ่ายเงิน (' + money(amount) + ' ฿)</a>' +
     '<p class="muted" style="font-size:11px;margin-top:6px;">ลิงก์เปิดหน้า QR พร้อมยอดเงิน — สแกน/แคปไปจ่ายในแอปธนาคาร แล้วกลับมากดยืนยัน</p>';

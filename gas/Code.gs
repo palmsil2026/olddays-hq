@@ -113,6 +113,7 @@ var WRITE_ACTIONS = {
   registerStaff: 1, submitDailyClose: 1, stockMove: 1, addIngredient: 1,
   deleteStockMove: 1, createPurchase: 1, updatePurchase: 1, saveMenuItem: 1,
   importFromGmail: 1, assignCommission: 1, payCommission: 1, payAllCommission: 1, saveStaffPay: 1,
+  unpayCommission: 1, disableIngredient: 1,
 };
 
 function handleRequest(e) {
@@ -167,7 +168,9 @@ function route(action, req) {
     case 'assignCommission':   return actionAssignCommission(req);
     case 'payCommission':      return actionPayCommission(req);
     case 'payAllCommission':   return actionPayAllCommission(req);
+    case 'unpayCommission':    return actionUnpayCommission(req);
     case 'saveStaffPay':       return actionSaveStaffPay(req);
+    case 'disableIngredient':  return actionDisableIngredient(req);
 
     // ── สต๊อก ──
     case 'getStock':         return actionGetStock(req);
@@ -755,7 +758,7 @@ function actionUpdatePurchase(req) {
   }
   if (!po) throw new Error('ไม่พบรายการเบิกซื้อ');
 
-  var newStatus = req.status; // approved | rejected | purchased
+  var newStatus = req.status; // approved | rejected | purchased | cancelled | unapprove
   var staff;
   if (newStatus === 'approved' || newStatus === 'rejected') {
     staff = requireRole(req, 'manager');
@@ -766,13 +769,38 @@ function actionUpdatePurchase(req) {
     po.Status = newStatus;
     po.Approved_By = staff.Name;
     po.Approved_At = new Date();
+  } else if (newStatus === 'cancelled') {
+    // ถอนคำขอ — คนที่ขอเองหรือผู้บริหาร ยกเลิกได้เฉพาะตอนยังรออนุมัติ
+    staff = requireStaff(req);
+    if (po.Status !== 'pending') throw new Error('ยกเลิกได้เฉพาะรายการที่ยังรออนุมัติ');
+    if (po.Requested_By !== staff.Name && ROLE_LEVEL[staff.Role] < ROLE_LEVEL.manager) {
+      throw new Error('ยกเลิกได้เฉพาะคนที่ขอเองหรือผู้บริหาร');
+    }
+    po.Status = 'cancelled';
+    po.Note = (po.Note ? po.Note + ' | ' : '') + 'ยกเลิกโดย ' + staff.Name;
+  } else if (newStatus === 'unapprove') {
+    // ถอนอนุมัติกลับเป็นรออนุมัติ — ทำได้ก่อนบันทึกซื้อ
+    staff = requireRole(req, 'manager');
+    if (po.Status !== 'approved') throw new Error('ถอนอนุมัติได้เฉพาะรายการที่อนุมัติแล้วและยังไม่บันทึกซื้อ');
+    po.Status = 'pending';
+    po.Note = (po.Note ? po.Note + ' | ' : '') + 'ถอนอนุมัติโดย ' + staff.Name;
+    po.Approved_By = '';
+    po.Approved_At = '';
   } else if (newStatus === 'purchased') {
     staff = requireStaff(req);
-    if (po.Status !== 'approved') throw new Error('ต้องอนุมัติก่อนถึงบันทึกซื้อได้');
-    po.Status = 'purchased';
-    po.Actual_Cost = num(req.actualCost);
-    po.Purchased_At = new Date();
-    if (req.note) po.Note = (po.Note ? po.Note + ' | ' : '') + req.note;
+    if (po.Status === 'purchased') {
+      // แก้ยอดจ่ายจริงย้อนหลัง — ผู้บริหารขึ้นไป (เก็บยอดเดิมไว้ใน Note)
+      if (ROLE_LEVEL[staff.Role] < ROLE_LEVEL.manager) throw new Error('แก้ยอดย้อนหลังต้องเป็นผู้บริหาร');
+      po.Note = (po.Note ? po.Note + ' | ' : '') + 'แก้ยอดจาก ' + fmtMoney(po.Actual_Cost) + ' โดย ' + staff.Name;
+      po.Actual_Cost = num(req.actualCost);
+    } else if (po.Status === 'approved') {
+      po.Status = 'purchased';
+      po.Actual_Cost = num(req.actualCost);
+      po.Purchased_At = new Date();
+      if (req.note) po.Note = (po.Note ? po.Note + ' | ' : '') + req.note;
+    } else {
+      throw new Error('ต้องอนุมัติก่อนถึงบันทึกซื้อได้');
+    }
   } else {
     throw new Error('สถานะไม่ถูกต้อง');
   }
@@ -1137,6 +1165,38 @@ function actionPayAllCommission(req) {
     updateRowObj(SHEET_TABS.COM_PAY, keep, r);
   });
   return { paid: true, days: rows.length, total: total };
+}
+
+/** ยกเลิกสถานะ "จ่ายแล้ว" กลับเป็นค้างจ่าย — สำหรับกดผิดคน/กดผิดปุ่ม (เก็บประวัติไว้ใน Note) */
+function actionUnpayCommission(req) {
+  var staff = requireRole(req, 'manager');
+  var row = findComPayRow(String(req.date || ''));
+  if (!row || row.Status !== 'paid') throw new Error('วันนี้ยังไม่อยู่ในสถานะจ่ายแล้ว');
+  row.Note = (row.Note ? row.Note + ' | ' : '') + 'ยกเลิกจ่าย (เดิมจ่ายให้ ' + row.Staff_Name + ') โดย ' + staff.Name;
+  row.Status = 'unpaid';
+  row.Paid_At = '';
+  row.Paid_By = '';
+  var keep = row._rowIndex;
+  delete row._rowIndex;
+  updateRowObj(SHEET_TABS.COM_PAY, keep, row);
+  return { unpaid: true };
+}
+
+/** เลิกใช้วัตถุดิบ (เพิ่มผิด/เลิกขาย) — ซ่อนจากแอป ประวัติใน Sheet ยังอยู่ครบ */
+function actionDisableIngredient(req) {
+  requireRole(req, 'manager');
+  var rows = readRows(SHEET_TABS.INGREDIENTS);
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].Ingredient_ID === req.ingredientId) {
+      rows[i].Active = false;
+      rows[i].Updated_At = new Date();
+      var keep = rows[i]._rowIndex;
+      delete rows[i]._rowIndex;
+      updateRowObj(SHEET_TABS.INGREDIENTS, keep, rows[i]);
+      return { disabled: true };
+    }
+  }
+  throw new Error('ไม่พบวัตถุดิบ');
 }
 
 /** บันทึกพร้อมเพย์ของพนักงาน (ใช้สร้างลิงก์จ่ายเงิน) */
