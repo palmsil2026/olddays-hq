@@ -2,13 +2,13 @@
 
 > ไฟล์นี้ตอบคำถามเดียว: **"โค้ดใน repo กับของที่รันจริง ตรงกันรึยัง"**
 > ประวัติว่าใครแก้อะไรเมื่อไหร่ → ดู `git log` (ไม่ต้องจดซ้ำที่นี่ เลยไม่ต้อง compact)
-> อัปเดตล่าสุด: 2026-08-16 โดยแชทร้านกาแฟ (cloud)
+> อัปเดตล่าสุด: 2026-08-16 โดยแชทโรงน้ำ (แก้ข้อเท็จจริงเรื่อง LIFF/Pages หลังย้าย repo)
 
 ## ของจริงที่รันอยู่ เทียบกับ repo
 
 | ชิ้นส่วน | ที่รันจริง | สถานะเทียบ repo |
 |---|---|---|
-| หน้าแอป LIFF | GitHub Pages ของ repo `OldDays-app` | ✅ sync ตรงกับ commit ล่าสุดแล้ว |
+| หน้าแอป LIFF | GitHub Pages ของ **repo นี้** (`palmsil2026.github.io/olddays-hq/`) | ✅ push `main` = ขึ้นจริงทันที (ตรวจ 2026-08-16: เนื้อหาตรงกับ commit ล่าสุด) |
 | GAS ร้าน (ผูกชีต OldDaysSystem) | Apps Script บัญชี palm.work2026 | ⏳ **รอคุณปาล์มวาง `gas/Code.gs` + Deploy New version** |
 | GAS เลขา (`palm-hq/secretary`) | Apps Script ตัวเลขา | ⏳ รอวางเช่นกัน — **ระวัง: แชท HR มีงานแก้ไฟล์เดียวกันค้าง commit ในเครื่อง D:\ ให้เขา pull+commit ก่อน แล้วค่อยวางทีเดียว** |
 
@@ -27,7 +27,7 @@
 | GAS ร้าน · Script Property `LINE_CHANNEL_ACCESS_TOKEN` | token บอทเลขาคุณปาล์ม | ✅ ใส่แล้ว (การ์ดเข้ากลุ่มได้แล้ว) |
 | ชีตร้าน · Config `LINE_GROUP_ID` | `Ca2b030f987abfc615db5533ebb7495f4` (กลุ่ม Old Days) | ✅ ใส่แล้ว |
 | GAS ร้าน · trigger `importDrawerReports` รายชั่วโมง | ดึงอีเมล FoodStory | ✅ รันแล้ว |
-| LIFF `2011084984-YNPjVDiA` Endpoint | `https://palmsil2026.github.io/OldDays-app/` | ✅ ใช้งานจริงอยู่ — งานค้างใน CLAUDE.md เรื่องย้ายมาชี้ Pages ของ repo นี้ **ยังไม่ทำ** ถ้าจะย้ายต้องเปิด Pages ที่นี่ก่อนแล้วค่อยสลับ Endpoint (อย่าลบ OldDays-app ก่อนสลับ) |
+| LIFF `2011084984-YNPjVDiA` Endpoint | `https://palmsil2026.github.io/olddays-hq/` | ✅ สลับมาแล้ว 2026-08-16 (ยืนยันจาก liff.line.me) — `OldDays-app` เป็น Pages ตัวเก่า ไม่มีอะไรชี้แล้ว |
 
 ## วิธีดูแลไฟล์นี้
 แก้โค้ดที่กระทบของจริงเมื่อไหร่ → อัปเดตตาราง "รอ deploy" · คุณปาล์ม deploy เสร็จเมื่อไหร่ → ติ๊กเป็น ✅ แล้วลบรายการออก
