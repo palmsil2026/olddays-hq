@@ -33,6 +33,10 @@ var SHEET_TABS = {
 // ชื่อผู้ส่งของ record ที่ดึงจากอีเมล POS อัตโนมัติ — แอปใช้แยกว่ายังรอคนยืนยัน
 var AUTO_SUBMITTER = 'FoodStory (อัตโนมัติ)';
 
+// groupId กลุ่ม Old Days ฝังไว้ในโค้ดเลย — เคยหายจากแท็บ Config จนการ์ดไม่เข้ากลุ่มทั้งวัน
+// (ค่าในแท็บ Config ยัง override ได้ถ้าอยากเปลี่ยนกลุ่ม)
+var DEFAULT_LINE_GROUP_ID = 'Ca2b030f987abfc615db5533ebb7495f4';
+
 var HEADERS = {
   Staff: ['LINE_User_ID', 'Name', 'Nickname', 'Role', 'Active', 'Created_At'],
   Categories: ['Category_ID', 'Name', 'Emoji', 'Unit', 'Count_Commission', 'Sort_Order', 'Active'],
@@ -855,8 +859,18 @@ function actionSaveMenuItem(req) {
 
 function getLineCredentials() {
   var token = PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_ACCESS_TOKEN');
-  var groupId = getConfig().LINE_GROUP_ID;
+  var groupId = getConfig().LINE_GROUP_ID || DEFAULT_LINE_GROUP_ID;
   return { token: token, groupId: groupId };
+}
+
+/**
+ * 🧪 รันฟังก์ชันนี้ใน editor เพื่อทดสอบการส่งเข้ากลุ่มแบบเห็นผลทันที
+ * สำเร็จ = ข้อความทดสอบเด้งในกลุ่ม Old Days / ล้มเหลว = error สีแดงพร้อมสาเหตุ (เช่น token หาย)
+ */
+function testGroupPush() {
+  var r = notifyGroup('🧪 ทดสอบระบบร้าน Old Days — เห็นข้อความนี้ = การส่งอัตโนมัติพร้อมใช้แล้วค่ะ');
+  if (!r.pushed) throw new Error('ส่งไม่สำเร็จ: ' + r.error);
+  return 'ส่งเข้ากลุ่มสำเร็จ ✅';
 }
 
 function notifyGroup(text) {
@@ -1229,14 +1243,15 @@ function actionSaveStaffPay(req) {
 
 var IMPORT_QUERY = 'from:noreply@foodstory.co subject:"Close Drawer Report" newer_than:3d';
 
-/** ตั้ง trigger ดึงอีเมลทุกชั่วโมง — รันครั้งเดียวพอ */
+/**
+ * ตั้ง trigger ดึงอีเมล — รันซ้ำได้ปลอดภัย: ลบ trigger เก่าของฟังก์ชันนี้ทั้งหมด
+ * แล้วสร้างใหม่แบบทุก 15 นาที (แบบรายชั่วโมงเคยหลับยาว อีเมลเข้า 17:40 กว่าจะดึงคือเช้าวันถัดไป)
+ */
 function setupImportTrigger() {
-  var exists = ScriptApp.getProjectTriggers().some(function (t) {
-    return t.getHandlerFunction() === 'importDrawerReports';
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'importDrawerReports') ScriptApp.deleteTrigger(t);
   });
-  if (!exists) {
-    ScriptApp.newTrigger('importDrawerReports').timeBased().everyHours(1).create();
-  }
+  ScriptApp.newTrigger('importDrawerReports').timeBased().everyMinutes(15).create();
   // รันทันทีหนึ่งรอบให้เห็นผลเลย
   return importDrawerReports();
 }

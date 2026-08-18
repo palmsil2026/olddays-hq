@@ -13,6 +13,7 @@
 | GAS เลขา (`palm-hq/secretary`) | Apps Script ตัวเลขา | ⏳ รอวางเช่นกัน — **ระวัง: แชท HR มีงานแก้ไฟล์เดียวกันค้าง commit ในเครื่อง D:\ ให้เขา pull+commit ก่อน แล้วค่อยวางทีเดียว** |
 
 ### ของที่อยู่ใน repo แล้วแต่ยังไม่ถึงมือผู้ใช้ (รอ deploy GAS ร้าน)
+- **18/8: trigger ทุก 15 นาที + groupId ฝังในโค้ด + ฟังก์ชัน `testGroupPush` ทดสอบส่งเข้ากลุ่ม**
 - ปุ่มแก้/ยกเลิกทั้งระบบ: ค่าคอมเปลี่ยนคน/ถอนจ่าย (↩︎), เบิกซื้อถอนคำขอ/ถอนอนุมัติ/แก้ยอดจริง, เลิกใช้วัตถุดิบ
 - แก้วันที่รายงานเพี้ยน -1 วัน (timezone)
 
@@ -25,8 +26,8 @@
 | ที่ | ค่า | สถานะ |
 |---|---|---|
 | GAS ร้าน · Script Property `LINE_CHANNEL_ACCESS_TOKEN` | token บอทเลขาคุณปาล์ม | ⚠️ ยังไม่ยืนยันว่าใส่แล้ว — เช็คใน Project Settings |
-| ชีตร้าน · Config `LINE_GROUP_ID` | `Ca2b030f987abfc615db5533ebb7495f4` (กลุ่ม Old Days) | ❌ **ว่างอยู่! (ตรวจ 18/8) — นี่คือสาเหตุการ์ดไม่เข้ากลุ่ม** |
-| GAS ร้าน · trigger `importDrawerReports` รายชั่วโมง | ดึงอีเมล FoodStory | ⚠️ ทำงานแต่มีช่วงหาย: อีเมล 17/8 17:37 เพิ่งถูกดึง 18/8 08:51 — เช็คหน้า Executions |
+| ชีตร้าน · Config `LINE_GROUP_ID` | ไม่ต้องใส่แล้ว — groupId ฝังในโค้ดเป็นค่า default (Config ไว้ override เท่านั้น) | ✅ แก้ถาวรในโค้ด 18/8 |
+| GAS ร้าน · trigger `importDrawerReports` | เปลี่ยนเป็นทุก 15 นาที (setupImportTrigger ลบของเก่า+สร้างใหม่เอง) | ⏳ **ต้องรัน setupImportTrigger ใหม่ 1 ครั้งหลังวางโค้ด** (trigger เดิมตายจริง: อีเมล 18/8 เข้า 16:46 ไม่ถูกดึงจนค่ำ) |
 | LIFF `2011084984-YNPjVDiA` Endpoint | `https://palmsil2026.github.io/olddays-hq/` | ✅ สลับมาแล้ว 2026-08-16 (ยืนยันจาก liff.line.me) — `OldDays-app` เป็น Pages ตัวเก่า ไม่มีอะไรชี้แล้ว |
 
 ## วิธีดูแลไฟล์นี้
