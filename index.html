@@ -428,7 +428,17 @@
       <input type="month" id="repMonth" onchange="loadReport()" />
       <div id="repSummary" class="muted" style="margin-top:12px;">เลือกเดือนเพื่อดูรายงาน</div>
       <div id="repCommission"></div>
-      <div id="repDays"></div>
+      <div class="divider"></div>
+      <div class="card-title">📅 ยอดขายรายสัปดาห์ (แตะวันเพื่อดูรายละเอียด)</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+        <button class="btn small secondary" onclick="shiftWeek(-1)">◀</button>
+        <div id="weekLabel" style="font-size:13px;font-weight:600;color:var(--gold);text-align:center;"></div>
+        <button class="btn small secondary" onclick="shiftWeek(1)">▶</button>
+      </div>
+      <div style="text-align:center;margin-bottom:4px;">
+        <button class="btn small secondary" onclick="goThisWeek()" style="font-size:11px;padding:4px 12px;">กลับมาสัปดาห์นี้</button>
+      </div>
+      <div id="weekDays" class="muted">กำลังโหลด...</div>
     </div>
     <div class="card" id="menuCard">
       <div class="card-title">🍽️ เมนูของร้าน</div>
@@ -551,7 +561,6 @@ let poCache = [];
 let currentIngredient = null;
 let moveType = 'in';
 let lastCloseRecord = null;
-let reportDays = [];
 
 const TAB_SCREEN = { home: 'scHome', close: 'scClose', stock: 'scStock', purchase: 'scPurchase', more: 'scMore' };
 const ROLE_TH = { owner: 'เจ้าของร้าน', manager: 'ผู้บริหาร', barista: 'บาริสต้า' };
@@ -1455,19 +1464,9 @@ async function loadReport() {
     // ค่าคอมรายคนไม่แสดงในรายงาน — เจ้าของดูได้ในแท็บ Commission ของ Google Sheet
     $('repCommission').innerHTML = '';
 
-    // 📅 รายวัน — แตะเพื่อดูรายละเอียดของแต่ละวัน
-    reportDays = (d.days || []).slice().sort((a, b) => String(b.Date).localeCompare(String(a.Date)));
-    $('repDays').innerHTML = reportDays.length
-      ? '<div class="divider"></div><div class="card-title">📅 ยอดขายรายวัน (แตะดูรายละเอียด)</div>' +
-        reportDays.map((day, i) => {
-          const isAuto = day.Submitted_By === AUTO_SUBMITTER;
-          return '<div class="list-row" style="cursor:pointer" onclick="showDayDetail(' + i + ')">' +
-            '<div class="list-main"><div class="list-title">' + thaiDate(String(day.Date).slice(0, 10)) + '</div>' +
-            '<div class="list-sub">' + (isAuto ? '📩 รอยืนยัน' : 'ปิดโดย ' + esc(nickOf(day.Submitted_By))) +
-            (day.Staff_On_Shift ? ' · 👥 ' + esc(day.Staff_On_Shift) : '') + '</div></div>' +
-            '<b style="color:var(--gold)">' + money(day.Total_Sales) + ' ฿</b></div>';
-        }).join('')
-      : '';
+    // 📅 ปฏิทินสัปดาห์ใช้ข้อมูลเดือนเดียวกัน — เก็บลง cache แล้ววาดใหม่
+    monthCache[month] = d.days || [];
+    renderWeek();
   } catch (e) {
     $('repSummary').textContent = e.message;
   }
@@ -1507,8 +1506,70 @@ async function saveMenuItem() {
   } catch (e) { showToast(e.message); }
 }
 
-function showDayDetail(i) {
-  const r = reportDays[i];
+// ══════════ ปฏิทินสัปดาห์ (จันทร์–อาทิตย์ เลื่อนสัปดาห์ได้) ══════════
+let weekStart = null;
+let weekRecords = [];
+const monthCache = {};
+
+function addDaysISO(iso, n) {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function mondayOf(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return addDaysISO(iso, -((d.getDay() + 6) % 7));
+}
+async function monthDays(month) {
+  if (!monthCache[month]) {
+    try {
+      const r = await api({ action: 'getReport', month });
+      monthCache[month] = r.days || [];
+    } catch (e) { monthCache[month] = []; }
+  }
+  return monthCache[month];
+}
+function shiftWeek(n) {
+  weekStart = addDaysISO(weekStart || mondayOf(todayISO()), n * 7);
+  renderWeek();
+}
+function goThisWeek() {
+  weekStart = mondayOf(todayISO());
+  renderWeek();
+}
+async function renderWeek() {
+  if (!weekStart) weekStart = mondayOf(todayISO());
+  const dates = [];
+  for (let i = 0; i < 7; i++) dates.push(addDaysISO(weekStart, i));
+  const months = [...new Set(dates.map(x => x.slice(0, 7)))];
+  const byDate = {};
+  for (const m of months) (await monthDays(m)).forEach(r => { byDate[String(r.Date).slice(0, 10)] = r; });
+  const TH_DAYS = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัส', 'ศุกร์', 'เสาร์', 'อาทิตย์'];
+  const today = todayISO();
+  $('weekLabel').textContent = thaiDate(dates[0]) + ' – ' + thaiDate(dates[6]);
+  weekRecords = dates.map(x => byDate[x] || null);
+  let sum = 0;
+  $('weekDays').innerHTML = dates.map((x, i) => {
+    const r = weekRecords[i];
+    if (r) sum += num(r.Total_Sales);
+    const isToday = x === today;
+    const isAuto = r && r.Submitted_By === AUTO_SUBMITTER;
+    const right = r
+      ? '<span>' + (isAuto ? '<span class="badge pending">📩</span> ' : '') + '<b style="color:var(--gold)">' + money(r.Total_Sales) + ' ฿</b></span>'
+      : '<span class="muted" style="font-size:12px">' + (x > today ? '' : '—') + '</span>';
+    return '<div class="list-row"' + (r ? ' style="cursor:pointer" onclick="openWeekDay(' + i + ')"' : '') + '>' +
+      '<div class="list-main"><div class="list-title"' + (isToday ? ' style="color:var(--gold)"' : '') + '>' +
+      TH_DAYS[i] + ' ' + thaiDate(x) + (isToday ? ' · วันนี้' : '') + '</div>' +
+      (r && !isAuto ? '<div class="list-sub">ปิดโดย ' + esc(nickOf(r.Submitted_By)) + '</div>' : '') +
+      '</div>' + right + '</div>';
+  }).join('') +
+  '<div class="sum-row" style="margin-top:10px;"><span class="muted">รวมทั้งสัปดาห์</span><b style="color:var(--gold)">' + money(sum) + ' ฿</b></div>';
+}
+function openWeekDay(i) {
+  if (weekRecords[i]) showDayDetailRecord(weekRecords[i]);
+}
+
+function showDayDetailRecord(r) {
   if (!r) return;
   $('dayModalTitle').textContent = '📅 ' + thaiDate(String(r.Date).slice(0, 10));
 
