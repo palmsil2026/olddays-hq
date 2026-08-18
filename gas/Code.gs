@@ -1263,6 +1263,9 @@ function actionImportFromGmail(req) {
 }
 
 function importDrawerReports(force) {
+  // ⚠️ trigger ตามเวลาจะยัด event object มาเป็น argument แรก — ถ้าไม่กรอง force จะเป็น true ทุกรอบ
+  // (บั๊กเดิม: ดึงซ้ำ+ส่งการ์ดเข้ากลุ่มซ้ำทุก 15 นาที) force จริงต้องเป็น boolean true เท่านั้น
+  force = (force === true);
   ensureSetup();
   var doneIds = {};
   readRows(SHEET_TABS.IMPORT_LOG).forEach(function (r) { doneIds[r.Message_ID] = true; });
@@ -1316,7 +1319,11 @@ function parseDrawerReport(text) {
   var lines = String(text).split('\n').map(function (l) { return l.trim(); });
   var joined = lines.join('\n');
 
-  var dm = joined.match(/ประจำวันที่\s+(\d{2})\/(\d{2})\/(\d{4})/);
+  // วันที่ของยอด: ใช้ "End Drawer Time" (วันปิดลิ้นชัก = วันขายจริง) เป็นหลัก
+  // "ประจำวันที่" ของ FoodStory คือวันเปิดลิ้นชัก — ลิ้นชักที่เปิดค้างเย็นวันก่อน
+  // จะทำให้ยอดของวันนี้ถูกตีตราเป็นเมื่อวาน (เจอจริง 18/8: หัวเขียน 17/08 แต่ยอดคือของ 18/8)
+  var dm = joined.match(/End Drawer Time[\s\S]{0,40}?(\d{2})\/(\d{2})\/(\d{4})/)
+        || joined.match(/ประจำวันที่\s+(\d{2})\/(\d{2})\/(\d{4})/);
   if (!dm) return null;
   var date = dm[3] + '-' + dm[2] + '-' + dm[1];
 
@@ -1407,6 +1414,13 @@ function saveImportedClose(parsed) {
   });
   if (existing.length && existing[existing.length - 1].Submitted_By !== AUTO_SUBMITTER) {
     return 'skipped-human-record'; // มีคนปิดยอดเองแล้ว ไม่ทับของคน
+  }
+  if (existing.length) {
+    // ยอดเดิมตรงกับอีเมลทุกบาทอยู่แล้ว → ไม่ต้องเซฟใหม่ ไม่ส่งการ์ดซ้ำ (กัน force/อีเมลส่งซ้ำสแปมกลุ่ม)
+    var last = existing[existing.length - 1];
+    if (num(last.Total_Sales) === num(parsed.totalSales) && num(last.Cash) === num(parsed.cash)) {
+      return 'unchanged';
+    }
   }
   if (existing.length) {
     // ทับฉบับร่างเก่าของตัวเอง (เช่นอีเมลส่งซ้ำ/แก้)
