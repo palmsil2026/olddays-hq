@@ -2,7 +2,7 @@
 
 > ไฟล์นี้ตอบคำถามเดียว: **"โค้ดใน repo กับของที่รันจริง ตรงกันรึยัง"**
 > ประวัติว่าใครแก้อะไรเมื่อไหร่ → ดู `git log` (ไม่ต้องจดซ้ำที่นี่ เลยไม่ต้อง compact)
-> อัปเดตล่าสุด: 2026-08-16 โดยแชทโรงน้ำ (แก้ข้อเท็จจริงเรื่อง LIFF/Pages หลังย้าย repo)
+> อัปเดตล่าสุด: 2026-08-18 โดยแชทโรงน้ำ (แก้ข้อเท็จจริงเรื่อง LIFF/Pages หลังย้าย repo)
 
 ## ของจริงที่รันอยู่ เทียบกับ repo
 
@@ -24,9 +24,9 @@
 
 | ที่ | ค่า | สถานะ |
 |---|---|---|
-| GAS ร้าน · Script Property `LINE_CHANNEL_ACCESS_TOKEN` | token บอทเลขาคุณปาล์ม | ✅ ใส่แล้ว (การ์ดเข้ากลุ่มได้แล้ว) |
-| ชีตร้าน · Config `LINE_GROUP_ID` | `Ca2b030f987abfc615db5533ebb7495f4` (กลุ่ม Old Days) | ✅ ใส่แล้ว |
-| GAS ร้าน · trigger `importDrawerReports` รายชั่วโมง | ดึงอีเมล FoodStory | ✅ รันแล้ว |
+| GAS ร้าน · Script Property `LINE_CHANNEL_ACCESS_TOKEN` | token บอทเลขาคุณปาล์ม | ⚠️ ยังไม่ยืนยันว่าใส่แล้ว — เช็คใน Project Settings |
+| ชีตร้าน · Config `LINE_GROUP_ID` | `Ca2b030f987abfc615db5533ebb7495f4` (กลุ่ม Old Days) | ❌ **ว่างอยู่! (ตรวจ 18/8) — นี่คือสาเหตุการ์ดไม่เข้ากลุ่ม** |
+| GAS ร้าน · trigger `importDrawerReports` รายชั่วโมง | ดึงอีเมล FoodStory | ⚠️ ทำงานแต่มีช่วงหาย: อีเมล 17/8 17:37 เพิ่งถูกดึง 18/8 08:51 — เช็คหน้า Executions |
 | LIFF `2011084984-YNPjVDiA` Endpoint | `https://palmsil2026.github.io/olddays-hq/` | ✅ สลับมาแล้ว 2026-08-16 (ยืนยันจาก liff.line.me) — `OldDays-app` เป็น Pages ตัวเก่า ไม่มีอะไรชี้แล้ว |
 
 ## วิธีดูแลไฟล์นี้
