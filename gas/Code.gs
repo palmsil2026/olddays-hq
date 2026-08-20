@@ -1377,7 +1377,15 @@ function parseDrawerReport(text) {
     pendName = line.replace(/\|/g, '').trim();
   }
 
-  var discount = lastTwoNums(findLine('Sub.TTL DC'));
+  // ส่วนลดมีได้หลายบรรทัด: Sub.TTL DC.(%) และ Sub.TTL DC.(Amt) — ต้องรวมทุกบรรทัด
+  // (บั๊กเดิมอ่านแค่บรรทัดแรก เช่น 17/8 ได้ 271.25 ทั้งที่จริง 921.25)
+  var discount = [0, 0];
+  lines.forEach(function (l) {
+    if (l.indexOf('Sub.TTL DC') === -1) return;
+    var d = lastTwoNums(l);
+    discount[0] += Math.abs(d[0]);
+    discount[1] += Math.abs(d[1]);
+  });
   var tctLine = findLine('ไทยช่วยไทย') || findLine('By Custom Payment');
   var voidAll = lastTwoNums(findLine('Void All'));
 
