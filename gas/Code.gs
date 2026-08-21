@@ -1580,3 +1580,82 @@ function jsonOut(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  📚 นำเข้ายอดย้อนหลัง 1–12 ส.ค. 2569 (ช่วงก่อนมีระบบ)
+//  ที่มา: รูปสรุปยอดในไลน์ โฟลเดอร์ Drive "ยอดขายร้านกาแฟ" — คุณเลขาแกะตัวเลขให้แล้ว
+//  วิธีใช้: รันมือครั้งเดียวใน editor (เลือกฟังก์ชัน seedHistoricalCloses → Run)
+//  ปลอดภัย: วันที่มีข้อมูลอยู่แล้วจะข้ามเสมอ ไม่ทับ และไม่ส่งการ์ดเข้ากลุ่ม
+// ═══════════════════════════════════════════════════════════════
+function seedHistoricalCloses() {
+  ensureSetup();
+  var DATA = [
+    { date: '2026-08-01', total: 2399, cash: 287, tct: 1327.65, transfer: 783, over: 0, dcN: 20, dcT: 546,
+      cats: { coffee: 23, 'premium-coffee': 2, 'non-coffee': 12, matcha: 3, beer: 5, bakery: 1 },
+      prem: { 'eth-natural': 1 }, note: 'ส่วนลดพนักงาน 18 + เฮียเมธี/เจ้แหม่ม 2' },
+    { date: '2026-08-02', total: 2601.50, cash: 700, tct: 1368.75, transfer: 533.75, over: 1, dcN: 11, dcT: 206.50,
+      cats: { coffee: 14, 'non-coffee': 15, matcha: 4, 'soft-cream': 1, soda: 3, bakery: 12 },
+      note: 'ส่วนลดพนักงาน 6 + เฮียเมธี/เจ้แหม่ม 5' },
+    { date: '2026-08-03', total: 1329.75, cash: 81, tct: 790.50, transfer: 401.25, over: 1, dcN: 16, dcT: 320.25,
+      cats: { signature: 1, coffee: 8, 'premium-coffee': 6, 'non-coffee': 4, matcha: 2, soda: 2, bakery: 4 },
+      prem: { 'eth-strawberry': 1, 'eth-natural': 1, 'gummy-berries': 4 },
+      note: 'เงินสดหลังหัก Visa 60 (ต้นฉบับ 139.75-60=81) | ส่วนลดพนักงาน 12 + เฮียเมธี/เจ้แหม่ม 4' },
+    { date: '2026-08-04', total: 2219.50, cash: 120, tct: 1880.75, transfer: 218.75, over: 0, dcN: 17, dcT: 430.50,
+      cats: { coffee: 16, 'premium-coffee': 2, 'non-coffee': 10, matcha: 2, 'soft-cream': 3, soda: 7, bakery: 7 },
+      note: 'Cake 7 ชิ้น นับรวมใน Bakery' },
+    { date: '2026-08-05', total: 2920.55, cash: 120, tct: 2272, transfer: 527, over: 0, dcN: 16, dcT: 446.45,
+      cats: { coffee: 21, 'premium-coffee': 7, 'non-coffee': 11, matcha: 5, soda: 2, bakery: 6 } },
+    { date: '2026-08-06', total: 2209.25, cash: 310, tct: 1380.75, transfer: 519.25, over: 1.75, dcN: 9, dcT: 295.75,
+      cats: { coffee: 10, 'premium-coffee': 4, 'non-coffee': 3, matcha: 2, 'soft-cream': 1, soda: 4, beer: 2, bakery: 1 },
+      prem: { 'premium-beans': 2 } },
+    { date: '2026-08-07', total: 2522.50, cash: 410, tct: 1617, transfer: 492.50, over: 0, dcN: 10, dcT: 192.50,
+      cats: { signature: 1, coffee: 17, 'premium-coffee': 1, 'non-coffee': 11, matcha: 2, 'soft-cream': 7, soda: 1, bakery: 4 },
+      note: 'หัวข้อความสรุปเขียน 6/8 แต่รายงานหมวดระบุ 7/8 — ยึด 7/8' },
+    { date: '2026-08-08', total: 2076.75, cash: 568.50, tct: 1031.25, transfer: 477.50, over: 2.50, dcN: 7, dcT: 152.25,
+      cats: { signature: 2, coffee: 10, 'premium-coffee': 2, 'non-coffee': 4, matcha: 6, 'soft-cream': 2, dirty: 1, soda: 2, bakery: 7 } },
+    { date: '2026-08-09', total: 5193.25, cash: 419, tct: 3470, transfer: 1304.75, over: 1, dcN: 3, dcT: 113.75,
+      cats: { coffee: 17, 'premium-coffee': 10, 'non-coffee': 16, matcha: 7, 'soft-cream': 7, soda: 2, beer: 1, bakery: 20 },
+      note: 'มีย้ายยอดข้ามช่อง ±60 ตามที่ทีมจดไว้ (เงินสด 359+60 / ไทยช่วยไทย 3529.50-60)' },
+    { date: '2026-08-10', total: 3101.75, cash: 240, tct: 2165, transfer: 699, over: 0, dcN: 4, dcT: 113.25,
+      cats: { coffee: 17, 'premium-coffee': 2, 'non-coffee': 11, matcha: 10, 'soft-cream': 4, soda: 1, bakery: 8 },
+      note: 'ทีมจดว่าไทยช่วยไทยเกินมา 2.25' },
+    { date: '2026-08-11', total: 2876, cash: 209.75, tct: 1831, transfer: 835.25, over: 0.25, dcN: 17, dcT: 367,
+      cats: { signature: 1, coffee: 21, 'non-coffee': 14, matcha: 5, 'soft-cream': 3, bakery: 10 } },
+    { date: '2026-08-12', total: 5825.75, cash: 589.75, tct: 3202, transfer: 2035.50, over: 1.25, dcN: 7, dcT: 264.25,
+      cats: { signature: 1, coffee: 15, 'premium-coffee': 8, 'non-coffee': 20, matcha: 8, 'soft-cream': 11, dirty: 1, soda: 8, beer: 1, bakery: 12 },
+      prem: { 'premium-beans': 2 } },
+  ];
+
+  var cats = readRows(SHEET_TABS.CATEGORIES).filter(function (c) { return isTrue(c.Active); });
+  var rate = num(getConfig().COMMISSION_PER_CUP || 3);
+  var have = {};
+  readRows(SHEET_TABS.DAILY).forEach(function (r) { have[dateKey(r.Date)] = true; });
+
+  var added = [], skipped = [];
+  DATA.forEach(function (d) {
+    if (have[d.date]) { skipped.push(d.date); return; }
+    var cups = calcCommissionCups(d.cats, cats);
+    appendRowObj(SHEET_TABS.DAILY, {
+      Date: d.date, Total_Sales: d.total, Cash: d.cash, Thai_Chuay_Thai: d.tct, Transfer: d.transfer,
+      Cash_Over: d.over,
+      Channel_Diff: Math.round((d.cash + d.tct + d.transfer - d.total) * 100) / 100,
+      Discount_Count: d.dcN, Discount_Total: d.dcT, Void_Count: 0, Void_Total: 0,
+      Category_Counts_JSON: JSON.stringify(d.cats), Premium_Counts_JSON: JSON.stringify(d.prem || {}),
+      Commission_Cups: cups, Commission_Rate: rate, Commission_Total: Math.round(cups * rate * 100) / 100,
+      Staff_On_Shift: '',
+      Note: '📚 นำเข้าย้อนหลังจากรูปสรุปในไลน์' + (d.note ? ' | ' + d.note : ''),
+      Submitted_By: 'บันทึกย้อนหลัง', Submitted_At: new Date(),
+    });
+    cats.forEach(function (c) {
+      appendRowObj(SHEET_TABS.SALES_ROWS, {
+        Date: d.date, Type: 'category', Name: c.Name,
+        Count: num(d.cats[c.Category_ID]), Unit: c.Unit,
+      });
+    });
+    added.push(d.date.slice(8) + '/8=' + d.total);
+  });
+  var msg = '✅ เพิ่ม ' + added.length + ' วัน [' + added.join(', ') + ']'
+          + (skipped.length ? ' | ข้าม (มีอยู่แล้ว): ' + skipped.join(', ') : '');
+  Logger.log(msg);
+  return msg;
+}
