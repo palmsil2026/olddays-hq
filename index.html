@@ -236,7 +236,7 @@
   </div>
   <div class="container">
     <div class="card" id="todayCard">
-      <div class="card-title">วันนี้</div>
+      <div class="card-title">📅 ภาพรวมรายวัน</div>
       <div id="todayStatus" class="muted">กำลังโหลด...</div>
     </div>
     <div class="card">
@@ -421,6 +421,11 @@ const TAB_SCREEN = { home: 'scHome', stock: 'scStock', purchase: 'scPurchase', m
 const ROLE_TH = { owner: 'เจ้าของร้าน', manager: 'ผู้บริหาร', barista: 'บาริสต้า' };
 const ROLE_LEVEL = { barista: 1, manager: 2, owner: 3 };
 const AUTO_SUBMITTER = 'FoodStory (อัตโนมัติ)';
+let dashDays = [];   // 7 วันล่าสุดบนหน้าแรก (แตะเปิดรายละเอียด)
+function thDayName(iso) {
+  return ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'][new Date(iso + 'T00:00:00').getDay()];
+}
+function openDashDay(i) { if (dashDays[i]) showDayDetailRecord(dashDays[i]); }
 
 // ══════════════════════════════════════════
 //  Utils
@@ -589,27 +594,66 @@ async function loadDashboard() {
   const month = thisMonthISO();
   $('monthTitle').textContent = 'เดือนนี้ (' + thaiDate(month + '-01').split('/').slice(1).join('/') + ')';
 
-  // ยอดวันนี้/ล่าสุด + สรุปเดือน — ยอดเข้าเองจากอีเมล POS ไม่ต้องมีใครกดปิดยอดแล้ว
-  api({ action: 'getReport', month }).then(d => {
+  // ภาพรวมรายวัน: วันนี้ (ตัวใหญ่) + เทียบเมื่อวาน + 7 วันล่าสุด — ยอดเข้าเองจากอีเมล POS
+  try {
+    const d = await api({ action: 'getReport', month });
     monthCache[month] = d.days || [];   // แชร์ cache ให้ปฏิทินสัปดาห์ในแท็บรายงาน
-    const today = todayISO();
-    const days = (d.days || []).slice().sort((a, b) => String(a.Date).localeCompare(String(b.Date)));
-    const latest = days.filter(x => String(x.Date).slice(0, 10) <= today).pop();
-    if (latest) {
-      const dk = String(latest.Date).slice(0, 10);
-      $('todayStatus').innerHTML =
-        '<div class="sum-hero"><div class="sub">' + (dk === today ? 'ยอดขายวันนี้' : 'ยอดล่าสุด · ' + thaiDate(dk)) + '</div>' +
-        '<div class="big">' + money(latest.Total_Sales) + '</div><div class="sub">บาท</div></div>' +
-        (dk === today ? '' : '<div class="muted" style="text-align:center;font-size:12px;">ยอดวันนี้จะเข้าเองหลังปิดรอบ POS (อีเมลเข้า ~17:40)</div>');
-    } else {
-      $('todayStatus').innerHTML = '<span class="muted">เดือนนี้ยังไม่มียอด — ระบบดึงจากอีเมล POS ให้เองอัตโนมัติ</span>';
-    }
     const t = d.totals;
     $('stSales').textContent = money(t.sales);
     $('stDays').textContent = t.days;
     $('stAvg').textContent = t.days ? money(t.sales / t.days) : '–';
     $('stDiscount').textContent = money(t.discount);
-  }).catch(() => { $('todayStatus').textContent = 'โหลดไม่สำเร็จ'; });
+
+    const today = todayISO();
+    const dates = [];
+    for (let i = 6; i >= 0; i--) dates.push(addDaysISO(today, -i));   // เก่า → ใหม่ จบที่วันนี้
+    const byDate = {};
+    for (const m of [...new Set(dates.map(x => x.slice(0, 7)))]) {
+      (await monthDays(m)).forEach(r => { byDate[String(r.Date).slice(0, 10)] = r; });
+    }
+    dashDays = dates.map(x => byDate[x] || null);
+
+    const todayRec = byDate[today];
+    const yKey = addDaysISO(today, -1);
+    const yRec = byDate[yKey];
+    const hero = todayRec || dashDays.slice().reverse().find(Boolean);
+    let html = '';
+    if (hero) {
+      const dk = String(hero.Date).slice(0, 10);
+      html += '<div class="sum-hero"><div class="sub">' + (dk === today ? 'ยอดขายวันนี้' : 'ยอดล่าสุด · ' + thaiDate(dk)) + '</div>' +
+        '<div class="big">' + money(hero.Total_Sales) + '</div><div class="sub">บาท</div></div>';
+      // แถวเทียบเมื่อวาน — มีทั้งคู่ค่อยคิด % ให้
+      if (yRec && dk === today) {
+        const y = num(yRec.Total_Sales);
+        const pct = y > 0 ? Math.round((num(hero.Total_Sales) - y) / y * 100) : null;
+        html += '<div style="text-align:center;font-size:13px;margin-top:2px;">' +
+          '<span class="muted">เมื่อวาน ' + money(y) + ' ฿</span>' +
+          (pct === null ? '' : ' · <b style="color:var(--' + (pct >= 0 ? 'green' : 'red') + ')">' +
+            (pct >= 0 ? '▲ +' : '▼ ') + pct + '%</b>') + '</div>';
+      } else if (yRec) {
+        html += '<div style="text-align:center;font-size:13px;margin-top:2px;"><span class="muted">เมื่อวาน ' + money(yRec.Total_Sales) + ' ฿</span></div>';
+      }
+      if (dk !== today) html += '<div class="muted" style="text-align:center;font-size:12px;margin-top:4px;">ยอดวันนี้จะเข้าเองหลังปิดรอบ POS (อีเมลเข้า ~17:40)</div>';
+    } else {
+      html += '<span class="muted">7 วันที่ผ่านมายังไม่มียอด — ระบบดึงจากอีเมล POS ให้เองอัตโนมัติ</span>';
+    }
+
+    // 7 วันล่าสุด (ใหม่ → เก่า) แตะดูรายละเอียดได้
+    html += '<div class="divider"></div>';
+    for (let i = dates.length - 1; i >= 0; i--) {
+      const x = dates[i];
+      const r = dashDays[i];
+      const isToday = x === today;
+      html += '<div class="list-row"' + (r ? ' style="cursor:pointer" onclick="openDashDay(' + i + ')"' : '') + '>' +
+        '<div class="list-title"' + (isToday ? ' style="color:var(--gold)"' : '') + '>' +
+        thDayName(x) + ' ' + thaiDate(x) + (isToday ? ' · วันนี้' : (x === yKey ? ' · เมื่อวาน' : '')) + '</div>' +
+        (r ? '<b style="color:var(--gold)">' + money(r.Total_Sales) + ' ฿</b>'
+           : '<span class="muted" style="font-size:12px">—</span>') + '</div>';
+    }
+    $('todayStatus').innerHTML = html;
+  } catch (e) {
+    $('todayStatus').textContent = 'โหลดไม่สำเร็จ';
+  }
 
   // สต๊อกใกล้หมด
   api({ action: 'getStock' }).then(d => {
