@@ -1437,8 +1437,10 @@ function saveImportedClose(parsed) {
   }
   if (existing.length) {
     // ยอดเดิมตรงกับอีเมลทุกบาทอยู่แล้ว → ไม่ต้องเซฟใหม่ ไม่ส่งการ์ดซ้ำ (กัน force/อีเมลส่งซ้ำสแปมกลุ่ม)
+    // เทียบส่วนลดด้วย — ไม่งั้น force ซ่อมข้อมูลส่วนลดที่เคยบันทึกขาดไม่ได้ (ยอดรวมเท่าเดิม)
     var last = existing[existing.length - 1];
-    if (num(last.Total_Sales) === num(parsed.totalSales) && num(last.Cash) === num(parsed.cash)) {
+    if (num(last.Total_Sales) === num(parsed.totalSales) && num(last.Cash) === num(parsed.cash)
+        && num(last.Discount_Total) === num(parsed.discountTotal)) {
       return 'unchanged';
     }
   }
