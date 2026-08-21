@@ -1253,7 +1253,8 @@ function actionSaveStaffPay(req) {
 //  เปิดใช้: รัน setupImportTrigger ครั้งเดียวใน editor (จะขอสิทธิ์ Gmail)
 // ═══════════════════════════════════════════════════════════════
 
-var IMPORT_QUERY = 'from:noreply@foodstory.co subject:"Close Drawer Report" newer_than:3d';
+// ย้อนหลัง 7 วัน — กว้างพอให้กด force ซ่อมข้อมูลย้อนหลังได้ (กันซ้ำด้วย ImportLog อยู่แล้ว ไม่เปลือง)
+var IMPORT_QUERY = 'from:noreply@foodstory.co subject:"Close Drawer Report" newer_than:7d';
 
 /**
  * ตั้ง trigger ดึงอีเมล — รันซ้ำได้ปลอดภัย: ลบ trigger เก่าของฟังก์ชันนี้ทั้งหมด
