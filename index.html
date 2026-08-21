@@ -235,10 +235,6 @@
     <div class="header-sub" id="homeGreeting">สวัสดี</div>
   </div>
   <div class="container">
-    <div class="card" id="todayCard">
-      <div class="card-title">📅 ภาพรวมรายวัน</div>
-      <div id="todayStatus" class="muted">กำลังโหลด...</div>
-    </div>
     <div class="card">
       <div class="card-title" id="monthTitle">เดือนนี้</div>
       <div class="stat-grid">
@@ -247,6 +243,10 @@
         <div class="stat"><div class="v" id="stAvg">–</div><div class="l">เฉลี่ยต่อวัน (฿)</div></div>
         <div class="stat"><div class="v" id="stDiscount">–</div><div class="l">ส่วนลดรวม (฿)</div></div>
       </div>
+    </div>
+    <div class="card" id="todayCard">
+      <div class="card-title">📅 ภาพรวมรายวัน</div>
+      <div id="todayStatus" class="muted">กำลังโหลด...</div>
     </div>
     <div class="card" id="lowStockCard" style="display:none;">
       <div class="card-title">⚠️ วัตถุดิบใกล้หมด</div>
@@ -491,14 +491,52 @@ async function renderDayCard() {
       '<div class="bar-track"><div class="bar-fill" style="width:' + w + '%;background:' + c.color + '"></div></div>';
   });
 
-  const bills = String(r.Note || '').match(/ลูกค้า (\d+) คน \/ (\d+) บิล/);
+  // ── ขายตามหมวด (โชว์เฉพาะที่ขายได้) ──
+  let catHtml = '';
+  try {
+    const counts = JSON.parse(r.Category_Counts_JSON || '{}');
+    categories.forEach(c => {
+      const cnt = num(counts[c.Category_ID]);
+      if (!cnt) return;
+      catHtml += '<div class="sum-row"><span class="muted">' + (c.Emoji ? c.Emoji + ' ' : '') + esc(c.Name) +
+        '</span><span>' + cnt + ' ' + esc(c.Unit) + '</span></div>';
+    });
+  } catch (e) {}
+  if (catHtml) html += '<div class="divider"></div>' + catHtml;
+
+  // ── เมนูพรีเมียม (ถ้าขายได้) ──
+  let premHtml = '';
+  try {
+    const pcounts = JSON.parse(r.Premium_Counts_JSON || '{}');
+    premiumItems.forEach(p => {
+      const cnt = num(pcounts[p.Item_ID]);
+      if (!cnt) return;
+      premHtml += '<div class="sum-row"><span class="muted">' + (p.Emoji ? p.Emoji + ' ' : '✨ ') + esc(p.Name) +
+        '</span><span>' + cnt + ' ' + esc(p.Unit) + '</span></div>';
+    });
+  } catch (e) {}
+  if (premHtml) html += '<div class="divider"></div><div class="card-title" style="margin-bottom:4px;">✨ เมนูพรีเมียม</div>' + premHtml;
+
+  // ── ตัวเลขปฏิบัติการ: แกะจาก Note ของ POS (ลูกค้า/บิล + ลิ้นชัก) ──
+  const note = String(r.Note || '').replace(/^📩 ดึงจากอีเมล POS \| /, '');
+  const bills = note.match(/ลูกค้า (\d+) คน \/ (\d+) บิล/);
+  const drawer = note.match(/ลิ้นชัก: คาด ([\d,.-]+) จริง ([\d,.-]+) \(([^)]+)\)/);
+  const noteRest = note.replace(/ลูกค้า \d+ คน \/ \d+ บิล/, '').replace(/ลิ้นชัก:[^|]*/, '')
+    .split('|').map(x => x.trim()).filter(Boolean).join(' · ');
+
   html += '<div class="divider"></div>' +
     '<div class="sum-row"><span class="muted">🥤 เครื่องดื่มรวม</span><b style="color:var(--gold)">' + num(r.Commission_Cups) + ' แก้ว</b></div>' +
-    (bills ? '<div class="sum-row"><span class="muted">👥 ลูกค้า</span><span>' + bills[1] + ' คน · ' + bills[2] + ' บิล</span></div>' : '') +
-    '<div class="sum-row"><span class="muted">ส่วนลด</span><span>' + num(r.Discount_Count) + ' รายการ / ' + money(r.Discount_Total) + ' ฿</span></div>' +
-    (num(r.Void_Count) ? '<div class="sum-row"><span class="muted">บิล Void</span><span>' + num(r.Void_Count) + ' บิล</span></div>' : '') +
+    (bills ? '<div class="sum-row"><span class="muted">👥 ลูกค้า</span><span>' + bills[1] + ' คน · ' + bills[2] + ' บิล' +
+      (num(bills[2]) > 0 ? ' · เฉลี่ย ' + money(num(r.Total_Sales) / num(bills[2])) + ' ฿/บิล' : '') + '</span></div>' : '') +
+    '<div class="sum-row"><span class="muted">🏷️ ส่วนลด</span><span>' + num(r.Discount_Count) + ' รายการ / ' + money(r.Discount_Total) + ' ฿</span></div>' +
+    (num(r.Void_Count) ? '<div class="sum-row"><span class="muted">🗑️ บิล Void</span><span>' + num(r.Void_Count) + ' บิล / ' + money(r.Void_Total) + ' ฿</span></div>' : '') +
+    (num(r.Cash_Over) ? '<div class="sum-row"><span class="muted">💵 เงินสดเกิน/ขาด</span><span>' + money(r.Cash_Over) + ' ฿</span></div>' : '') +
+    (drawer ? '<div class="sum-row"><span class="muted">🗄️ ลิ้นชักเงินสด</span><span>คาด ' + drawer[1] + ' → นับจริง ' + drawer[2] +
+      ' <b style="color:var(--' + (drawer[3].charAt(0) === '+' ? 'green' : 'red') + ')">(' + esc(drawer[3]) + ')</b></span></div>' : '') +
+    (r.Staff_On_Shift ? '<div class="sum-row"><span class="muted">👥 คนเข้าวันนั้น</span><span>' + esc(r.Staff_On_Shift) + '</span></div>' : '') +
+    (noteRest ? '<div class="sum-row"><span class="muted" style="font-size:12px">📝 ' + esc(noteRest) + '</span></div>' : '') +
     '<div class="sum-row"><span class="muted" style="font-size:12px">' +
-    (r.Submitted_By === AUTO_SUBMITTER ? '📩 จากอีเมล POS อัตโนมัติ' : 'ปิดโดย ' + esc(nickOf(r.Submitted_By))) + '</span></div>';
+    (r.Submitted_By === AUTO_SUBMITTER ? '📩 จากอีเมล POS อัตโนมัติ' : '✍️ ปิดโดย ' + esc(nickOf(r.Submitted_By))) + '</span></div>';
 
   $('todayStatus').innerHTML = html;
 }
