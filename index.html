@@ -421,11 +421,87 @@ const TAB_SCREEN = { home: 'scHome', stock: 'scStock', purchase: 'scPurchase', m
 const ROLE_TH = { owner: 'เจ้าของร้าน', manager: 'ผู้บริหาร', barista: 'บาริสต้า' };
 const ROLE_LEVEL = { barista: 1, manager: 2, owner: 3 };
 const AUTO_SUBMITTER = 'FoodStory (อัตโนมัติ)';
-let dashDays = [];   // 7 วันล่าสุดบนหน้าแรก (แตะเปิดรายละเอียด)
 function thDayName(iso) {
-  return ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'][new Date(iso + 'T00:00:00').getDay()];
+  return ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัส', 'ศุกร์', 'เสาร์'][new Date(iso + 'T00:00:00').getDay()];
 }
-function openDashDay(i) { if (dashDays[i]) showDayDetailRecord(dashDays[i]); }
+
+// ── การ์ดปฏิทินรายวันบนหน้าแรก: เลื่อน ◀ ▶ ดูทีละวัน ──
+let dayCursor = null;
+function shiftDay(n) {
+  const next = addDaysISO(dayCursor || todayISO(), n);
+  if (next > todayISO()) return;   // ไม่มีอนาคตให้ดู
+  dayCursor = next;
+  renderDayCard();
+}
+function goToday() { dayCursor = todayISO(); renderDayCard(); }
+
+async function renderDayCard() {
+  const today = todayISO();
+  const iso = dayCursor || today;
+  const prevISO = addDaysISO(iso, -1);
+  const byDate = {};
+  for (const m of [...new Set([iso.slice(0, 7), prevISO.slice(0, 7)])]) {
+    (await monthDays(m)).forEach(r => { byDate[String(r.Date).slice(0, 10)] = r; });
+  }
+  const r = byDate[iso];
+  const prev = byDate[prevISO];
+
+  const tag = iso === today ? ' · วันนี้' : (iso === addDaysISO(today, -1) ? ' · เมื่อวาน' : '');
+  let html =
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
+    '<button class="btn small secondary" onclick="shiftDay(-1)">◀</button>' +
+    '<div style="text-align:center;font-size:15px;font-weight:600;color:var(--gold)">' +
+    thDayName(iso) + ' ' + thaiDate(iso) +
+    '<span style="color:var(--cream);font-weight:400;font-size:13px">' + tag + '</span></div>' +
+    '<button class="btn small secondary" onclick="shiftDay(1)"' +
+    (iso >= today ? ' disabled style="opacity:.3"' : '') + '>▶</button></div>' +
+    (iso === today ? '' :
+      '<div style="text-align:center;margin-top:4px;"><button class="btn small secondary" onclick="goToday()" style="font-size:11px;padding:4px 12px;">กลับมาวันนี้</button></div>');
+
+  if (!r) {
+    const now = new Date();
+    const waiting = iso === today && (now.getHours() * 100 + now.getMinutes()) < 1810;
+    html += '<div class="sum-hero" style="padding:20px 0;">' +
+      (waiting
+        ? '<div style="font-size:32px;">⏳</div><div class="sub" style="margin-top:6px;">ยอดวันนี้จะเข้าเองหลังปิดรอบ POS<br>(ระบบเช็คอีเมลช่วง 16:30–18:00)</div>'
+        : '<div style="font-size:32px;">🚫</div><div class="sub" style="margin-top:6px;">ไม่มีการปิดยอด<br><span style="font-size:11px;">(ร้านหยุด หรือไม่มีอีเมลสรุปจาก POS)</span></div>') +
+      '</div>';
+    $('todayStatus').innerHTML = html;
+    return;
+  }
+
+  html += '<div class="sum-hero"><div class="big">' + money(r.Total_Sales) + '</div><div class="sub">บาท</div></div>';
+  if (prev && num(prev.Total_Sales) > 0) {
+    const pct = Math.round((num(r.Total_Sales) - num(prev.Total_Sales)) / num(prev.Total_Sales) * 100);
+    html += '<div style="text-align:center;font-size:13px;">' +
+      '<span class="muted">' + (iso === today ? 'เมื่อวาน' : 'วันก่อนหน้า') + ' ' + money(prev.Total_Sales) + ' ฿</span>' +
+      ' · <b style="color:var(--' + (pct >= 0 ? 'green' : 'red') + ')">' + (pct >= 0 ? '▲ +' : '▼ ') + pct + '%</b></div>';
+  }
+
+  const channels = [
+    { label: '💵 เงินสด', amount: num(r.Cash), color: 'var(--green)' },
+    { label: '🇹🇭 ไทยช่วยไทย', amount: num(r.Thai_Chuay_Thai), color: 'var(--blue)' },
+    { label: '📲 เงินโอน', amount: num(r.Transfer), color: 'var(--pink)' },
+  ];
+  const chSum = channels.reduce((t, c) => t + c.amount, 0) || 1;
+  html += '<div class="divider"></div>';
+  channels.forEach(c => {
+    const w = Math.max(3, Math.round(c.amount / chSum * 100));
+    html += '<div class="sum-row"><span>' + c.label + '</span><b>' + money(c.amount) + ' ฿</b></div>' +
+      '<div class="bar-track"><div class="bar-fill" style="width:' + w + '%;background:' + c.color + '"></div></div>';
+  });
+
+  const bills = String(r.Note || '').match(/ลูกค้า (\d+) คน \/ (\d+) บิล/);
+  html += '<div class="divider"></div>' +
+    '<div class="sum-row"><span class="muted">🥤 เครื่องดื่มรวม</span><b style="color:var(--gold)">' + num(r.Commission_Cups) + ' แก้ว</b></div>' +
+    (bills ? '<div class="sum-row"><span class="muted">👥 ลูกค้า</span><span>' + bills[1] + ' คน · ' + bills[2] + ' บิล</span></div>' : '') +
+    '<div class="sum-row"><span class="muted">ส่วนลด</span><span>' + num(r.Discount_Count) + ' รายการ / ' + money(r.Discount_Total) + ' ฿</span></div>' +
+    (num(r.Void_Count) ? '<div class="sum-row"><span class="muted">บิล Void</span><span>' + num(r.Void_Count) + ' บิล</span></div>' : '') +
+    '<div class="sum-row"><span class="muted" style="font-size:12px">' +
+    (r.Submitted_By === AUTO_SUBMITTER ? '📩 จากอีเมล POS อัตโนมัติ' : 'ปิดโดย ' + esc(nickOf(r.Submitted_By))) + '</span></div>';
+
+  $('todayStatus').innerHTML = html;
+}
 
 // ══════════════════════════════════════════
 //  Utils
@@ -604,54 +680,8 @@ async function loadDashboard() {
     $('stAvg').textContent = t.days ? money(t.sales / t.days) : '–';
     $('stDiscount').textContent = money(t.discount);
 
-    const today = todayISO();
-    const dates = [];
-    for (let i = 6; i >= 0; i--) dates.push(addDaysISO(today, -i));   // เก่า → ใหม่ จบที่วันนี้
-    const byDate = {};
-    for (const m of [...new Set(dates.map(x => x.slice(0, 7)))]) {
-      (await monthDays(m)).forEach(r => { byDate[String(r.Date).slice(0, 10)] = r; });
-    }
-    dashDays = dates.map(x => byDate[x] || null);
-
-    const todayRec = byDate[today];
-    const yKey = addDaysISO(today, -1);
-    const yRec = byDate[yKey];
-    const hero = todayRec || dashDays.slice().reverse().find(Boolean);
-    let html = '';
-    if (hero) {
-      const dk = String(hero.Date).slice(0, 10);
-      html += '<div class="sum-hero"><div class="sub">' + (dk === today ? 'ยอดขายวันนี้' : 'ยอดล่าสุด · ' + thaiDate(dk)) + '</div>' +
-        '<div class="big">' + money(hero.Total_Sales) + '</div><div class="sub">บาท</div></div>';
-      // แถวเทียบเมื่อวาน — มีทั้งคู่ค่อยคิด % ให้
-      if (yRec && dk === today) {
-        const y = num(yRec.Total_Sales);
-        const pct = y > 0 ? Math.round((num(hero.Total_Sales) - y) / y * 100) : null;
-        html += '<div style="text-align:center;font-size:13px;margin-top:2px;">' +
-          '<span class="muted">เมื่อวาน ' + money(y) + ' ฿</span>' +
-          (pct === null ? '' : ' · <b style="color:var(--' + (pct >= 0 ? 'green' : 'red') + ')">' +
-            (pct >= 0 ? '▲ +' : '▼ ') + pct + '%</b>') + '</div>';
-      } else if (yRec && dk !== yKey) {
-        // hero ไม่ใช่ของเมื่อวานอยู่แล้ว ค่อยโชว์แถวเมื่อวานเพิ่ม (กันตัวเลขซ้ำกับข้างบน)
-        html += '<div style="text-align:center;font-size:13px;margin-top:2px;"><span class="muted">เมื่อวาน ' + money(yRec.Total_Sales) + ' ฿</span></div>';
-      }
-      if (dk !== today) html += '<div class="muted" style="text-align:center;font-size:12px;margin-top:4px;">ยอดวันนี้จะเข้าเองหลังปิดรอบ POS (อีเมลเข้า ~17:40)</div>';
-    } else {
-      html += '<span class="muted">7 วันที่ผ่านมายังไม่มียอด — ระบบดึงจากอีเมล POS ให้เองอัตโนมัติ</span>';
-    }
-
-    // 7 วันล่าสุด (ใหม่ → เก่า) แตะดูรายละเอียดได้
-    html += '<div class="divider"></div>';
-    for (let i = dates.length - 1; i >= 0; i--) {
-      const x = dates[i];
-      const r = dashDays[i];
-      const isToday = x === today;
-      html += '<div class="list-row"' + (r ? ' style="cursor:pointer" onclick="openDashDay(' + i + ')"' : '') + '>' +
-        '<div class="list-title"' + (isToday ? ' style="color:var(--gold)"' : '') + '>' +
-        thDayName(x) + ' ' + thaiDate(x) + (isToday ? ' · วันนี้' : (x === yKey ? ' · เมื่อวาน' : '')) + '</div>' +
-        (r ? '<b style="color:var(--gold)">' + money(r.Total_Sales) + ' ฿</b>'
-           : '<span class="muted" style="font-size:12px">—</span>') + '</div>';
-    }
-    $('todayStatus').innerHTML = html;
+    dayCursor = todayISO();
+    renderDayCard();
   } catch (e) {
     $('todayStatus').textContent = 'โหลดไม่สำเร็จ';
   }

@@ -1275,11 +1275,24 @@ function actionImportFromGmail(req) {
   return importDrawerReports(true);
 }
 
+// ⏱️ รอบอัตโนมัติทำงานเฉพาะช่วงเย็น 16:30–18:10 (อีเมลปิดรอบปกติเข้า ~16:30-17:40)
+// และหยุดทันทีที่ยอดของวันนี้เข้าระบบแล้ว — นอกช่วงนี้ trigger ตื่นมาแล้วจบเลย ไม่แตะ Gmail
+// ปุ่ม "ดึงตอนนี้เลย" ในแอป (force) ใช้ได้ตลอดเวลา ไม่ติดช่วงนี้
+function inImportWindow_() {
+  var now = new Date();
+  var hm = Number(Utilities.formatDate(now, 'GMT+7', 'HHmm'));
+  if (hm < 1630 || hm > 1810) return false;
+  var today = Utilities.formatDate(now, 'GMT+7', 'yyyy-MM-dd');
+  var got = readRows(SHEET_TABS.DAILY).some(function (r) { return dateKey(r.Date) === today; });
+  return !got;   // ยอดวันนี้เข้าแล้ว = รอบที่เหลือของวันไม่ต้องทำอะไร
+}
+
 function importDrawerReports(force) {
   // ⚠️ trigger ตามเวลาจะยัด event object มาเป็น argument แรก — ถ้าไม่กรอง force จะเป็น true ทุกรอบ
   // (บั๊กเดิม: ดึงซ้ำ+ส่งการ์ดเข้ากลุ่มซ้ำทุก 15 นาที) force จริงต้องเป็น boolean true เท่านั้น
   force = (force === true);
   ensureSetup();
+  if (!force && !inImportWindow_()) return { imported: [], skipped: 'นอกช่วงดึงอัตโนมัติ (16:30–18:10) หรือยอดวันนี้เข้าแล้ว' };
   var doneIds = {};
   readRows(SHEET_TABS.IMPORT_LOG).forEach(function (r) { doneIds[r.Message_ID] = true; });
 
