@@ -89,23 +89,6 @@
     .btn.danger { background: var(--red); color: #fff; }
     .btn.green { background: var(--green); color: #1A120D; }
 
-    /* ── Steppers (นับแก้ว) ── */
-    .count-row {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 9px 0; border-bottom: 1px solid var(--line);
-    }
-    .count-row:last-child { border-bottom: none; }
-    .count-name { font-size: 14px; flex: 1; }
-    .count-unit { font-size: 11px; color: var(--dim); }
-    .stepper { display: flex; align-items: center; gap: 4px; }
-    .stepper button {
-      width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--line);
-      background: var(--card2); color: var(--gold); font-size: 18px; font-weight: 700; cursor: pointer;
-    }
-    .stepper input {
-      width: 52px; text-align: center; padding: 7px 4px; font-size: 16px; font-weight: 600;
-    }
-
     /* ── Chips (พนักงานเข้ากะ) ── */
     .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
     .chip {
@@ -123,19 +106,6 @@
     .badge.cancelled { background: #3A332C; color: var(--dim); }
     .badge.low       { background: #46282A; color: var(--red); }
     .badge.ok        { background: #2E4132; color: var(--green); }
-
-    /* ── Validation banner ── */
-    .vbanner { border-radius: 12px; padding: 10px 14px; font-size: 13px; margin-top: 12px; display: none; }
-    .vbanner.ok   { display: block; background: #2E4132; color: var(--green); }
-    .vbanner.warn { display: block; background: #46362A; color: var(--gold); }
-
-    /* ── Commission preview ── */
-    .commission-box {
-      margin-top: 14px; background: var(--card2); border: 1px dashed var(--gold);
-      border-radius: 14px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;
-    }
-    .commission-box .amt { font-size: 20px; font-weight: 700; color: var(--gold); }
-    .commission-box .sub { font-size: 11px; color: var(--dim); }
 
     /* ── Bottom nav ── */
     .nav {
@@ -273,7 +243,7 @@
       <div class="card-title" id="monthTitle">เดือนนี้</div>
       <div class="stat-grid">
         <div class="stat"><div class="v" id="stSales">–</div><div class="l">ยอดขายรวม (฿)</div></div>
-        <div class="stat"><div class="v" id="stDays">–</div><div class="l">วันที่ปิดยอด</div></div>
+        <div class="stat"><div class="v" id="stDays">–</div><div class="l">วันขาย</div></div>
         <div class="stat"><div class="v" id="stAvg">–</div><div class="l">เฉลี่ยต่อวัน (฿)</div></div>
         <div class="stat"><div class="v" id="stDiscount">–</div><div class="l">ส่วนลดรวม (฿)</div></div>
       </div>
@@ -286,92 +256,6 @@
       <div class="card-title">🛒 เบิกซื้อรออนุมัติ</div>
       <div id="pendingPoList"></div>
     </div>
-  </div>
-</div>
-
-<!-- ══════════ Daily Close ══════════ -->
-<div class="screen" id="scClose">
-  <div class="header"><div class="header-title">ปิดยอดรายวัน</div><div class="header-sub">กรอกตามสลิปสรุปจากเครื่อง POS + แอปถุงเงิน</div></div>
-  <div class="container">
-    <div class="card">
-      <label class="fl">วันที่</label>
-      <input type="date" id="dcDate" onchange="checkExistingClose()" />
-      <div id="dcExistWarn" class="vbanner warn" style="margin-top:8px;"></div>
-
-      <label class="fl">ยอดขายรวม (บาท) *</label>
-      <input type="number" id="dcTotal" inputmode="decimal" step="0.01" placeholder="0.00" oninput="validateMoney()" />
-
-      <div class="row2">
-        <div>
-          <label class="fl">💵 เงินสด</label>
-          <input type="number" id="dcCash" inputmode="decimal" step="0.01" placeholder="0.00" oninput="validateMoney()" />
-        </div>
-        <div>
-          <label class="fl">🇹🇭 ไทยช่วยไทย</label>
-          <input type="number" id="dcTct" inputmode="decimal" step="0.01" placeholder="0.00" oninput="validateMoney()" />
-        </div>
-      </div>
-      <div class="row2">
-        <div>
-          <label class="fl">📲 เงินโอน</label>
-          <input type="number" id="dcTransfer" inputmode="decimal" step="0.01" placeholder="0.00" oninput="validateMoney()" />
-        </div>
-        <div>
-          <label class="fl">เงินสดเกิน/ขาด (+/-)</label>
-          <input type="number" id="dcCashOver" inputmode="decimal" step="0.01" placeholder="0.00" />
-        </div>
-      </div>
-      <div id="moneyBanner" class="vbanner"></div>
-
-      <div class="row2">
-        <div>
-          <label class="fl">ส่วนลด (รายการ)</label>
-          <input type="number" id="dcDiscCount" inputmode="numeric" placeholder="0" />
-        </div>
-        <div>
-          <label class="fl">ส่วนลดรวม (บาท)</label>
-          <input type="number" id="dcDiscTotal" inputmode="decimal" step="0.01" placeholder="0.00" />
-        </div>
-      </div>
-      <div class="row2">
-        <div>
-          <label class="fl">บิล Void (บิล)</label>
-          <input type="number" id="dcVoidCount" inputmode="numeric" placeholder="0" />
-        </div>
-        <div>
-          <label class="fl">ยอด Void (บาท)</label>
-          <input type="number" id="dcVoidTotal" inputmode="decimal" step="0.01" placeholder="0.00" />
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">จำนวนขายตามหมวด</div>
-      <div id="dcCategories"></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">เมนูพรีเมียม / อื่น ๆ</div>
-      <div id="dcPremium"></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">👥 วันนี้ใครมาบ้าง (บันทึกไว้ดูย้อนหลังเฉย ๆ)</div>
-      <div class="chips" id="dcStaffChips"></div>
-      <label class="fl">หมายเหตุ</label>
-      <textarea id="dcNote" placeholder="เช่น ฝนตก คนน้อย / มีอีเวนต์"></textarea>
-      <button class="btn" id="btnSubmitClose" onclick="submitDailyClose(false)">✅ ปิดยอด + ส่งสรุปเข้ากลุ่ม</button>
-    </div>
-  </div>
-</div>
-
-<!-- ══════════ Close success ══════════ -->
-<div class="screen" id="scCloseDone">
-  <div class="header"><div class="header-title">ปิดยอดสำเร็จ 🎉</div><div class="header-sub" id="doneDate"></div></div>
-  <div class="container">
-    <div class="card" id="doneCard"></div>
-    <div class="card" id="donePushCard"></div>
-    <button class="btn secondary" onclick="showTab('home'); loadDashboard();">กลับหน้าแรก</button>
   </div>
 </div>
 
@@ -421,7 +305,7 @@
 
 <!-- ══════════ More ══════════ -->
 <div class="screen" id="scMore">
-  <div class="header"><div class="header-title">เพิ่มเติม</div><div class="header-sub" id="moreRole"></div></div>
+  <div class="header"><div class="header-title">รายงาน</div><div class="header-sub" id="moreRole"></div></div>
   <div class="container">
     <div class="card">
       <div class="card-title">📊 รายงานรายเดือน</div>
@@ -440,23 +324,6 @@
       </div>
       <div id="weekDays" class="muted">กำลังโหลด...</div>
     </div>
-    <div class="card" id="menuCard">
-      <div class="card-title">🍽️ เมนูของร้าน</div>
-      <p class="muted" style="font-size:12px;margin-bottom:8px;">
-        โครงเมนูสำหรับให้พนักงานมากรอกรายละเอียด (ชื่อ ราคา หมวด)
-      </p>
-      <div id="menuList" class="muted">–</div>
-      <div id="menuEditor" class="hidden">
-        <div class="divider"></div>
-        <label class="fl">ชื่อเมนู *</label>
-        <input type="text" id="menuName" placeholder="เช่น Es-Yen Signature" />
-        <div class="row2">
-          <div><label class="fl">หมวด</label><select id="menuCat"></select></div>
-          <div><label class="fl">ราคา (บาท)</label><input type="number" id="menuPrice" inputmode="decimal" placeholder="0" /></div>
-        </div>
-        <button class="btn secondary" onclick="saveMenuItem()">บันทึกเมนู</button>
-      </div>
-    </div>
     <div class="card hidden" id="comCard">
       <div class="card-title">💰 จ่ายค่าคอม (เฉพาะผู้บริหาร/เจ้าของ)</div>
       <input type="month" id="comMonth" onchange="loadComAdmin()" />
@@ -466,7 +333,7 @@
     <div class="card">
       <div class="card-title">📩 ดึงยอดจาก POS (Gmail)</div>
       <p class="muted" style="font-size:12px;margin-bottom:4px;">
-        ปกติระบบดึงเองทุกชั่วโมง — ปุ่มนี้ไว้กดดึงทันทีถ้ายอดยังไม่เข้า
+        ปกติระบบดึงเองทุก 15 นาที — ปุ่มนี้ไว้กดดึงทันทีถ้ายอดยังไม่เข้า
       </p>
       <button class="btn secondary" onclick="importFromGmail(this)">ดึงตอนนี้เลย</button>
     </div>
@@ -505,16 +372,6 @@
   </div>
 </div>
 
-<!-- ══════════ Confirm overwrite modal ══════════ -->
-<div class="modal-bg" id="owModalBg" onclick="if(event.target===this)hideOwModal()">
-  <div class="modal">
-    <h3>⚠️ วันนี้มียอดอยู่แล้ว</h3>
-    <div class="muted" style="font-size:13px;line-height:1.7;" id="owInfo"></div>
-    <button class="btn danger" onclick="submitDailyClose(true)">บันทึกทับของเดิม</button>
-    <button class="btn secondary" onclick="hideOwModal()">ยกเลิก</button>
-  </div>
-</div>
-
 <!-- ══════════ Commission pay modal (manager+) ══════════ -->
 <div class="modal-bg" id="payModalBg" onclick="if(event.target===this)this.classList.remove('show')">
   <div class="modal">
@@ -540,10 +397,9 @@
 
 <div class="nav" id="bottomNav" style="display:none;">
   <button data-tab="home" class="on" onclick="showTab('home')"><span class="ico">🏠</span>หน้าแรก</button>
-  <button data-tab="close" onclick="showTab('close')"><span class="ico">🧾</span>ปิดยอด</button>
   <button data-tab="stock" onclick="showTab('stock')"><span class="ico">📦</span>สต๊อก</button>
   <button data-tab="purchase" onclick="showTab('purchase')"><span class="ico">🛒</span>เบิกซื้อ</button>
-  <button data-tab="more" onclick="showTab('more')"><span class="ico">⋯</span>เพิ่มเติม</button>
+  <button data-tab="more" onclick="showTab('more')"><span class="ico">📊</span>รายงาน</button>
 </div>
 
 <script>
@@ -560,11 +416,11 @@ let stockCache = [];
 let poCache = [];
 let currentIngredient = null;
 let moveType = 'in';
-let lastCloseRecord = null;
 
-const TAB_SCREEN = { home: 'scHome', close: 'scClose', stock: 'scStock', purchase: 'scPurchase', more: 'scMore' };
+const TAB_SCREEN = { home: 'scHome', stock: 'scStock', purchase: 'scPurchase', more: 'scMore' };
 const ROLE_TH = { owner: 'เจ้าของร้าน', manager: 'ผู้บริหาร', barista: 'บาริสต้า' };
 const ROLE_LEVEL = { barista: 1, manager: 2, owner: 3 };
+const AUTO_SUBMITTER = 'FoodStory (อัตโนมัติ)';
 
 // ══════════════════════════════════════════
 //  Utils
@@ -709,7 +565,6 @@ function enterApp() {
   $('bottomNav').style.display = 'flex';
   $('homeGreeting').textContent =
     'สวัสดี ' + (me.Nickname || me.Name) + ' · ' + (ROLE_TH[me.Role] || me.Role);
-  buildCloseForm();
   showTab('home');
   loadDashboard();
 }
@@ -734,26 +589,27 @@ async function loadDashboard() {
   const month = thisMonthISO();
   $('monthTitle').textContent = 'เดือนนี้ (' + thaiDate(month + '-01').split('/').slice(1).join('/') + ')';
 
-  // วันนี้ปิดยอดหรือยัง
-  api({ action: 'getDailyClose', date: todayISO() }).then(d => {
-    if (d.record) {
-      $('todayStatus').innerHTML =
-        '<span class="badge ok">ปิดยอดแล้ว</span> ยอดขาย <b style="color:var(--gold)">' +
-        money(d.record.Total_Sales) + ' ฿</b> โดย ' + esc(nickOf(d.record.Submitted_By));
-    } else {
-      $('todayStatus').innerHTML =
-        '<span class="badge pending">ยังไม่ปิดยอด</span> <span class="muted">สิ้นวันอย่าลืมกดปิดยอดที่แท็บ 🧾</span>';
-    }
-  }).catch(() => { $('todayStatus').textContent = 'โหลดไม่สำเร็จ'; });
-
-  // สรุปเดือน
-  // ค่าคอมไม่โชว์บน dashboard — ดูได้ตอนปิดยอดรายวันเท่านั้น (เจ้าของดูรวมได้ในแท็บ Commission ของ Sheet)
+  // ยอดวันนี้/ล่าสุด + สรุปเดือน — ยอดเข้าเองจากอีเมล POS ไม่ต้องมีใครกดปิดยอดแล้ว
   api({ action: 'getReport', month }).then(d => {
-    $('stSales').textContent = money(d.totals.sales);
-    $('stDays').textContent = d.totals.days;
-    $('stAvg').textContent = d.totals.days ? money(d.totals.sales / d.totals.days) : '–';
-    $('stDiscount').textContent = money(d.totals.discount);
-  }).catch(() => {});
+    monthCache[month] = d.days || [];   // แชร์ cache ให้ปฏิทินสัปดาห์ในแท็บรายงาน
+    const today = todayISO();
+    const days = (d.days || []).slice().sort((a, b) => String(a.Date).localeCompare(String(b.Date)));
+    const latest = days.filter(x => String(x.Date).slice(0, 10) <= today).pop();
+    if (latest) {
+      const dk = String(latest.Date).slice(0, 10);
+      $('todayStatus').innerHTML =
+        '<div class="sum-hero"><div class="sub">' + (dk === today ? 'ยอดขายวันนี้' : 'ยอดล่าสุด · ' + thaiDate(dk)) + '</div>' +
+        '<div class="big">' + money(latest.Total_Sales) + '</div><div class="sub">บาท</div></div>' +
+        (dk === today ? '' : '<div class="muted" style="text-align:center;font-size:12px;">ยอดวันนี้จะเข้าเองหลังปิดรอบ POS (อีเมลเข้า ~17:40)</div>');
+    } else {
+      $('todayStatus').innerHTML = '<span class="muted">เดือนนี้ยังไม่มียอด — ระบบดึงจากอีเมล POS ให้เองอัตโนมัติ</span>';
+    }
+    const t = d.totals;
+    $('stSales').textContent = money(t.sales);
+    $('stDays').textContent = t.days;
+    $('stAvg').textContent = t.days ? money(t.sales / t.days) : '–';
+    $('stDiscount').textContent = money(t.discount);
+  }).catch(() => { $('todayStatus').textContent = 'โหลดไม่สำเร็จ'; });
 
   // สต๊อกใกล้หมด
   api({ action: 'getStock' }).then(d => {
@@ -774,7 +630,7 @@ async function loadDashboard() {
       $('pendingPoCard').style.display = pending.length ? 'block' : 'none';
       $('pendingPoList').innerHTML = pending.map(p =>
         '<div class="list-row"><div class="list-main"><div class="list-title">' + esc(p.Items) + '</div>' +
-        '<div class="list-sub">' + esc(p.Requested_By) + (num(p.Est_Cost) ? ' · ~' + money(p.Est_Cost) + ' ฿' : '') + '</div></div>' +
+        '<div class="list-sub">' + esc(nickOf(p.Requested_By)) + (num(p.Est_Cost) ? ' · ~' + money(p.Est_Cost) + ' ฿' : '') + '</div></div>' +
         '<button class="btn small green" onclick="quickApprove(\'' + safeId(p.Purchase_ID) + '\')">อนุมัติ</button></div>'
       ).join('');
     }).catch(() => {});
@@ -792,216 +648,6 @@ async function quickApprove(sid) {
     showToast('อนุมัติแล้ว ✓');
     loadDashboard();
   } catch (e) { showToast(e.message); }
-}
-
-// ══════════════════════════════════════════
-//  Daily close form
-// ══════════════════════════════════════════
-function buildCloseForm() {
-  $('dcDate').value = todayISO();
-
-  // ชิปเข้ากะ (บันทึกเฉย ๆ ไม่เกี่ยวค่าคอม) — ใช้ชื่อเล่น เจ้าของไม่นับ
-  $('dcStaffChips').innerHTML = staffList.filter(s => s.role !== 'owner').map(s => {
-    const label = s.nickname || s.name;
-    return '<div class="chip" data-name="' + esc(label) + '" onclick="this.classList.toggle(\'on\')">' + esc(label) + '</div>';
-  }).join('');
-
-  $('dcCategories').innerHTML = categories.map(c =>
-    counterRow('cat', c.Category_ID, (c.Emoji ? c.Emoji + ' ' : '') + c.Name, c.Unit)).join('');
-  $('dcPremium').innerHTML = premiumItems.map(p =>
-    counterRow('prem', p.Item_ID, (p.Emoji ? p.Emoji + ' ' : '') + p.Name, p.Unit)).join('');
-
-  checkExistingClose();
-}
-
-function counterRow(prefix, id, label, unit) {
-  const inputId = prefix + '-' + id;
-  return '<div class="count-row">' +
-    '<div class="count-name">' + esc(label) + ' <span class="count-unit">(' + esc(unit) + ')</span></div>' +
-    '<div class="stepper">' +
-    '<button type="button" onclick="stepCount(\'' + inputId + '\',-1)">−</button>' +
-    '<input type="number" id="' + inputId + '" inputmode="numeric" value="0" min="0" oninput="updateCommission()" onfocus="this.select()" />' +
-    '<button type="button" onclick="stepCount(\'' + inputId + '\',1)">+</button>' +
-    '</div></div>';
-}
-
-function stepCount(inputId, delta) {
-  const el = $(inputId);
-  el.value = Math.max(0, num(el.value) + delta);
-  updateCommission();
-}
-
-function getCounts(prefix, items, idField) {
-  const counts = {};
-  items.forEach(it => { counts[it[idField]] = num(($(prefix + '-' + it[idField]) || {}).value); });
-  return counts;
-}
-
-function selectedStaff() {
-  return Array.from(document.querySelectorAll('#dcStaffChips .chip.on')).map(c => c.dataset.name);
-}
-
-/** แก้วที่นับค่าคอม = หมวดที่ Count_Commission เท่านั้น (ไม่รวม Beer/Bakery) */
-function commissionCups() {
-  const counts = getCounts('cat', categories, 'Category_ID');
-  return categories.reduce((sum, c) => {
-    const flag = c.Count_Commission === true || c.Count_Commission === 'TRUE' || c.Count_Commission === 'true';
-    return sum + (flag ? num(counts[c.Category_ID]) : 0);
-  }, 0);
-}
-
-// ค่าคอมเป็นเรื่องหลังบ้าน (ผู้บริหารจ่ายในหน้า "จ่ายค่าคอม") — พนักงานไม่เห็นตอนปิดยอด
-function updateCommission() {}
-
-function validateMoney() {
-  const total = num($('dcTotal').value);
-  const sum = num($('dcCash').value) + num($('dcTct').value) + num($('dcTransfer').value);
-  const diff = Math.round((sum - total) * 100) / 100;
-  const b = $('moneyBanner');
-  if (!total && !sum) { b.className = 'vbanner'; return; }
-  if (Math.abs(diff) < 0.005) {
-    b.className = 'vbanner ok';
-    b.textContent = '✓ ยอดช่องทางเงินรวมตรงกับยอดขาย';
-  } else {
-    b.className = 'vbanner warn';
-    b.textContent = '⚠️ เงินสด+ไทยช่วยไทย+โอน = ' + money(sum) + ' ฿ ' +
-      (diff > 0 ? 'เกิน' : 'ขาด') + 'จากยอดขาย ' + money(Math.abs(diff)) + ' ฿ — เช็คอีกทีก่อนส่ง';
-  }
-}
-
-const AUTO_SUBMITTER = 'FoodStory (อัตโนมัติ)';
-
-async function checkExistingClose() {
-  const el = $('dcExistWarn');
-  el.className = 'vbanner warn';
-  el.style.display = 'none';
-  try {
-    const d = await api({ action: 'getDailyClose', date: $('dcDate').value });
-    if (!d.record) { resetCloseForm(); return; }
-    // มีข้อมูลของวันนี้อยู่แล้ว → เติมตัวเลขคาไว้เสมอ ใช้เปิดดูย้อนหลังได้ในตัว
-    prefillFromRecord(d.record);
-    el.style.display = 'block';
-    if (d.record.Submitted_By === AUTO_SUBMITTER) {
-      el.className = 'vbanner ok';
-      el.textContent = '📩 ยอดจาก POS เข้ามาแล้ว เติมตัวเลขให้เรียบร้อย — ตรวจดูแล้วกดปิดยอดได้เลย';
-    } else {
-      el.className = 'vbanner warn';
-      el.textContent = '✅ วันนี้ปิดยอดแล้วโดย ' + nickOf(d.record.Submitted_By) +
-        ' — ดูได้เลย ถ้าแก้ตัวเลขแล้วกดส่งจะเป็นการบันทึกทับ';
-    }
-  } catch (e) { /* เงียบไว้ ไม่ใช่เรื่องคอขาดบาดตาย */ }
-}
-
-function prefillFromRecord(r) {
-  $('dcTotal').value = num(r.Total_Sales) || '';
-  $('dcCash').value = num(r.Cash) || '';
-  $('dcTct').value = num(r.Thai_Chuay_Thai) || '';
-  $('dcTransfer').value = num(r.Transfer) || '';
-  $('dcCashOver').value = num(r.Cash_Over) || '';
-  $('dcDiscCount').value = num(r.Discount_Count) || '';
-  $('dcDiscTotal').value = num(r.Discount_Total) || '';
-  $('dcVoidCount').value = num(r.Void_Count) || '';
-  $('dcVoidTotal').value = num(r.Void_Total) || '';
-  try {
-    const counts = JSON.parse(r.Category_Counts_JSON || '{}');
-    Object.keys(counts).forEach(id => {
-      const input = $('cat-' + id);
-      if (input) input.value = num(counts[id]);
-    });
-  } catch (e) {}
-  // ชิปเข้ากะตามที่บันทึกไว้
-  const onShift = String(r.Staff_On_Shift || '').split(',').map(s => s.trim()).filter(Boolean);
-  document.querySelectorAll('#dcStaffChips .chip').forEach(c =>
-    c.classList.toggle('on', onShift.includes(c.dataset.name)));
-  // เก็บ note จาก POS ไว้ (ตัด prefix ออกให้อ่านง่าย)
-  $('dcNote').value = r.Note ? String(r.Note).replace(/^📩 ดึงจากอีเมล POS \| /, '') : '';
-  validateMoney();
-}
-
-async function submitDailyClose(confirmOverwrite) {
-  const total = num($('dcTotal').value);
-  if (!$('dcDate').value) { showToast('กรุณาเลือกวันที่'); return; }
-  if (total <= 0) { showToast('กรุณากรอกยอดขายรวม'); return; }
-
-  const btn = $('btnSubmitClose');
-  btn.disabled = true;
-  btn.textContent = 'กำลังบันทึก...';
-  hideOwModal();
-
-  try {
-    const data = await api({
-      action: 'submitDailyClose',
-      date: $('dcDate').value,
-      totalSales: total,
-      cash: num($('dcCash').value),
-      thaiChuayThai: num($('dcTct').value),
-      transfer: num($('dcTransfer').value),
-      cashOver: num($('dcCashOver').value),
-      discountCount: num($('dcDiscCount').value),
-      discountTotal: num($('dcDiscTotal').value),
-      voidCount: num($('dcVoidCount').value),
-      voidTotal: num($('dcVoidTotal').value),
-      categoryCounts: getCounts('cat', categories, 'Category_ID'),
-      premiumCounts: getCounts('prem', premiumItems, 'Item_ID'),
-      staffOnShift: [],
-      note: $('dcNote').value.trim(),
-      confirmOverwrite: !!confirmOverwrite,
-    });
-
-    if (data.needConfirm) {
-      $('owInfo').innerHTML = 'วันที่ ' + thaiDate($('dcDate').value) + ' มียอด ' +
-        money(data.existing.Total_Sales) + ' ฿ บันทึกโดย ' + esc(data.existing.Submitted_By) +
-        ' อยู่แล้ว<br>ต้องการบันทึกทับหรือไม่?';
-      $('owModalBg').classList.add('show');
-      return;
-    }
-
-    lastCloseRecord = data.record;
-    renderCloseDone(data);
-    showScreen('scCloseDone');
-    resetCloseForm();
-  } catch (e) {
-    showToast(e.message, 4000);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '✅ ปิดยอด + ส่งสรุปเข้ากลุ่ม';
-  }
-}
-
-function hideOwModal() { $('owModalBg').classList.remove('show'); }
-
-function resetCloseForm() {
-  ['dcTotal', 'dcCash', 'dcTct', 'dcTransfer', 'dcCashOver', 'dcDiscCount', 'dcDiscTotal',
-    'dcVoidCount', 'dcVoidTotal', 'dcNote'].forEach(id => { $(id).value = ''; });
-  document.querySelectorAll('#dcCategories input, #dcPremium input').forEach(i => { i.value = 0; });
-  document.querySelectorAll('#dcStaffChips .chip').forEach(c => c.classList.remove('on'));
-  $('moneyBanner').className = 'vbanner';
-}
-
-function renderCloseDone(data) {
-  const r = data.record;
-  $('doneDate').textContent = 'วันที่ ' + thaiDate(r.Date);
-
-  const channels = [
-    { label: '💵 เงินสด', amount: num(r.Cash), color: 'var(--green)' },
-    { label: '🇹🇭 ไทยช่วยไทย', amount: num(r.Thai_Chuay_Thai), color: 'var(--blue)' },
-    { label: '📲 เงินโอน', amount: num(r.Transfer), color: 'var(--pink)' },
-  ];
-  const sum = channels.reduce((s, c) => s + c.amount, 0) || 1;
-
-  let html = '<div class="sum-hero"><div class="sub">ยอดขายวันนี้</div>' +
-    '<div class="big">' + money(r.Total_Sales) + '</div><div class="sub">บาท</div></div><div class="divider"></div>';
-  channels.forEach(c => {
-    const pct = Math.max(3, Math.round(c.amount / sum * 100));
-    html += '<div class="sum-row"><span>' + c.label + '</span><b>' + money(c.amount) + ' ฿</b></div>' +
-      '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + c.color + '"></div></div>';
-  });
-  $('doneCard').innerHTML = html;
-
-  $('donePushCard').innerHTML = data.pushed
-    ? '<div style="color:var(--green)">✅ คุณเลขาส่ง infographic เข้ากลุ่ม LINE แล้ว</div>'
-    : '<div style="color:var(--gold)">⚠️ ยังไม่ได้ส่งเข้ากลุ่ม: ' + esc(data.pushError || '') +
-      '<br><span class="muted" style="font-size:12px">ตั้งค่า token/groupId แล้วกดส่งซ้ำได้ที่แท็บ "เพิ่มเติม"</span></div>';
 }
 
 // ══════════════════════════════════════════
@@ -1254,15 +900,15 @@ function initMoreTab() {
   $('moreRole').textContent = (me.Nickname || me.Name) + ' · ' + (ROLE_TH[me.Role] || me.Role);
   $('sysInfo').innerHTML =
     'ร้าน: ' + esc(config.shopName) + '<br>' +
-    'ค่าคอม: ' + num(config.commissionPerCup) + ' บาท/แก้ว (เครื่องดื่ม ไม่รวม Beer/Bakery)<br>' +
-    'บอทเลขา LINE: ' + (config.lineGroupConfigured ? '✅ พร้อมส่งเข้ากลุ่ม' : '⚠️ ยังไม่ได้ตั้งค่า (ดู README)') + '<br>' +
+    'ยอดขายเข้าอัตโนมัติจากอีเมลปิดรอบ POS (ระบบเช็คทุก 15 นาที)<br>' +
+    (myLevel() >= ROLE_LEVEL.manager
+      ? 'ค่าคอม: ' + num(config.commissionPerCup) + ' บาท/แก้ว — จัดการที่การ์ด 💰 ด้านบน<br>' : '') +
     'ข้อมูลทั้งหมดอยู่ใน Google Sheets — เปิดดู/ทำ pivot ได้เลย';
   if (!moreTabInited) {
     moreTabInited = true;
     $('repMonth').value = thisMonthISO();
     $('resendDate').value = todayISO();
     loadReport();
-    loadMenu();
     if (myLevel() >= ROLE_LEVEL.manager) {
       $('comCard').classList.remove('hidden');
       $('comMonth').value = thisMonthISO();
@@ -1307,9 +953,9 @@ function renderComAdmin() {
     $('comSummary').innerHTML = Object.keys(unpaidBy).length
       ? Object.keys(unpaidBy).map(name =>
           '<div class="list-row"><div class="list-main"><div class="list-title">' + esc(nickOf(name)) + '</div>' +
-          '<div class="list-sub">ค้างจ่ายรวม</div></div>' +
+          '<div class="list-sub">ค้างจ่ายรวม (เดือนที่เลือก)</div></div>' +
           '<b style="color:var(--gold)">' + money(unpaidBy[name]) + ' ฿</b>' +
-          '<button class="btn small green" onclick="openPayAll(\'' + esc(name) + '\')">💸 จ่ายรวม</button></div>'
+          '<button class="btn small green" data-n="' + esc(name) + '" onclick="openPayAll(this.dataset.n)">💸 จ่ายรวม</button></div>'
         ).join('')
       : '<div class="muted" style="font-size:12px;margin-top:8px;">ไม่มียอดค้างจ่าย 🎉</div>';
 
@@ -1319,7 +965,7 @@ function renderComAdmin() {
     $('comDays').innerHTML = days.length ? days.map(day => {
       const p = payByDate[day.date];
       const staffChips = '<div class="chips">' + (d.staffNames || []).map(s =>
-        '<div class="chip" onclick="assignCom(\'' + day.date + '\',\'' + esc(s.name) + '\')">' +
+        '<div class="chip" data-n="' + esc(s.name) + '" onclick="assignCom(\'' + day.date + '\', this.dataset.n)">' +
         esc(s.nickname || s.name) + '</div>').join('') + '</div>';
       let right;
       if (!p || comReassignDate === day.date) {
@@ -1363,7 +1009,7 @@ async function unpayCom(date, btn) {
 async function assignCom(date, staffName) {
   try {
     await api({ action: 'assignCommission', date, staffName });
-    showToast('บันทึกแล้ว: ' + thaiDate(date) + ' → ' + staffName);
+    showToast('บันทึกแล้ว: ' + thaiDate(date) + ' → ' + nickOf(staffName));
     loadComAdmin();
   } catch (e) { showToast(e.message, 4000); }
 }
@@ -1372,7 +1018,7 @@ function ppEditHTML(name) {
   return '<label class="fl">พร้อมเพย์ของ ' + esc(nickOf(name)) + ' — กรอกครั้งเดียว ระบบจำให้</label>' +
     '<div style="display:flex;gap:8px;">' +
     '<input type="text" id="ppInput" inputmode="numeric" placeholder="เบอร์/เลขพร้อมเพย์" style="flex:1;" />' +
-    '<button class="btn small" onclick="savePp(\'' + esc(name) + '\')">บันทึก</button></div>';
+    '<button class="btn small" data-n="' + esc(name) + '" onclick="savePp(this.dataset.n)">บันทึก</button></div>';
 }
 
 function editPp(name) {
@@ -1386,7 +1032,7 @@ function ppLinkHTML(name, amount) {
   const link = 'https://promptpay.io/' + pp + '/' + amount;
   return '<div class="divider"></div>' +
     '<div class="sum-row"><span class="muted">พร้อมเพย์ ' + esc(nickOf(name)) + '</span>' +
-    '<span><b>' + esc(pp) + '</b> <button class="btn small secondary" onclick="editPp(\'' + esc(name) + '\')">✏️</button></span></div>' +
+    '<span><b>' + esc(pp) + '</b> <button class="btn small secondary" data-n="' + esc(name) + '" onclick="editPp(this.dataset.n)">✏️</button></span></div>' +
     '<a href="' + link + '" target="_blank" rel="noopener" class="btn" ' +
     'style="text-align:center;text-decoration:none;display:block;">📲 เปิด QR จ่ายเงิน (' + money(amount) + ' ฿)</a>' +
     '<p class="muted" style="font-size:11px;margin-top:6px;">ลิงก์เปิดหน้า QR พร้อมยอดเงิน — สแกน/แคปไปจ่ายในแอปธนาคาร แล้วกลับมากดยืนยัน</p>';
@@ -1436,7 +1082,7 @@ async function confirmPaid() {
       await api({ action: 'payAllCommission', staffName: payCtx.name, month: payCtx.month });
     }
     $('payModalBg').classList.remove('show');
-    showToast('บันทึกจ่ายแล้ว ✓ ' + money(payCtx.amount) + ' ฿ → ' + payCtx.name, 4000);
+    showToast('บันทึกจ่ายแล้ว ✓ ' + money(payCtx.amount) + ' ฿ → ' + nickOf(payCtx.name), 4000);
     loadComAdmin();
   } catch (e) {
     showToast(e.message, 4000);
@@ -1470,40 +1116,6 @@ async function loadReport() {
   } catch (e) {
     $('repSummary').textContent = e.message;
   }
-}
-
-async function loadMenu() {
-  const canEdit = myLevel() >= ROLE_LEVEL.manager;
-  $('menuEditor').classList.toggle('hidden', !canEdit);
-  if (canEdit) {
-    $('menuCat').innerHTML = categories.map(c =>
-      '<option value="' + esc(c.Category_ID) + '">' + esc(c.Name) + '</option>').join('');
-  }
-  try {
-    const d = await api({ action: 'getMenu' });
-    const items = d.menuItems || [];
-    $('menuList').innerHTML = items.length
-      ? items.map(m => {
-          const cat = categories.find(c => c.Category_ID === m.Category_ID);
-          return '<div class="list-row"><div class="list-main"><div class="list-title">' + esc(m.Name) + '</div>' +
-            '<div class="list-sub">' + (cat ? esc(cat.Name) : '-') + '</div></div>' +
-            '<b>' + money(m.Price) + ' ฿</b></div>';
-        }).join('')
-      : '<span class="muted">ยังไม่มีเมนู — ให้พนักงานมากรอกได้เลย</span>';
-  } catch (e) {
-    $('menuList').textContent = e.message;
-  }
-}
-
-async function saveMenuItem() {
-  const name = $('menuName').value.trim();
-  if (!name) { showToast('กรอกชื่อเมนูก่อน'); return; }
-  try {
-    await api({ action: 'saveMenuItem', name, categoryId: $('menuCat').value, price: num($('menuPrice').value) });
-    $('menuName').value = ''; $('menuPrice').value = '';
-    showToast('บันทึกเมนูแล้ว ✓');
-    loadMenu();
-  } catch (e) { showToast(e.message); }
 }
 
 // ══════════ ปฏิทินสัปดาห์ (จันทร์–อาทิตย์ เลื่อนสัปดาห์ได้) ══════════
@@ -1621,7 +1233,7 @@ async function importFromGmail(btn) {
     const rows = d.imported || [];
     const ok = rows.filter(r => r.status === 'imported').length;
     if (!rows.length) showToast('ไม่มีอีเมลใหม่ (ดึงไปหมดแล้ว)');
-    else if (ok) showToast('ดึงสำเร็จ ' + ok + ' วัน ✓ ไปที่แท็บปิดยอดได้เลย', 4000);
+    else if (ok) showToast('ดึงสำเร็จ ' + ok + ' วัน ✓ ดูได้ที่หน้าแรก/ปฏิทินสัปดาห์', 4000);
     else showToast('เจออีเมลแต่ไม่ได้นำเข้า: ' + rows.map(r => r.status).join(', '), 4500);
   } catch (e) {
     showToast(e.message, 4500);

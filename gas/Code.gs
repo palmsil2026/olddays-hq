@@ -516,7 +516,7 @@ function deleteRowsByDate(tabName, date) {
 }
 
 function actionGetDailyClose(req) {
-  requireStaff(req);
+  var staff = requireStaff(req);
   var rows = readRows(SHEET_TABS.DAILY).filter(function (r) {
     return dateKey(r.Date) === String(req.date);
   });
@@ -524,8 +524,18 @@ function actionGetDailyClose(req) {
   if (rec) {
     delete rec._rowIndex;
     rec.Date = dateKey(rec.Date); // กัน timezone เพี้ยนตอน serialize เป็น JSON
+    stripCommission(rec, staff);  // ค่าคอม (บาท) เป็นเรื่องหลังบ้าน — ไม่ส่งให้บาริสต้า
   }
   return { record: rec };
+}
+
+// ตัดตัวเลขเงินค่าคอมออกจากข้อมูลที่ส่งให้พนักงานระดับต่ำกว่า manager
+// (จำนวนแก้ว Commission_Cups ไม่ลับ — ใช้โชว์ "เครื่องดื่มรวม" ทั้งในแอปและการ์ดกลุ่ม)
+function stripCommission(rec, staff) {
+  if (ROLE_LEVEL[staff.Role] >= ROLE_LEVEL.manager) return rec;
+  delete rec.Commission_Total;
+  delete rec.Commission_Rate;
+  return rec;
 }
 
 function actionGetReport(req) {
@@ -540,17 +550,19 @@ function actionGetReport(req) {
     // ส่งวันที่เป็น string yyyy-MM-dd ตามเวลาไทยเสมอ — ถ้าปล่อยเป็น Date object
     // ตอนแปลง JSON มันกลายเป็นเวลา UTC แล้วหน้าแอปโชว์วันถอยหลังไป 1 วัน
     r.Date = dateKey(r.Date);
-    return r;
+    return stripCommission(r, staff);
   });
 
-  var totals = { sales: 0, cash: 0, tct: 0, transfer: 0, discount: 0, commission: 0, days: days.length };
+  var canSeeMoney = ROLE_LEVEL[staff.Role] >= ROLE_LEVEL.manager;
+  var totals = { sales: 0, cash: 0, tct: 0, transfer: 0, discount: 0, days: days.length };
+  if (canSeeMoney) totals.commission = 0;
   days.forEach(function (d) {
     totals.sales += num(d.Total_Sales);
     totals.cash += num(d.Cash);
     totals.tct += num(d.Thai_Chuay_Thai);
     totals.transfer += num(d.Transfer);
     totals.discount += num(d.Discount_Total);
-    totals.commission += num(d.Commission_Total);
+    if (canSeeMoney) totals.commission += num(d.Commission_Total);
   });
 
   // ค่าคอมรายคน: บาริสต้าเห็นแค่ของตัวเอง / manager+ เห็นทุกคน
