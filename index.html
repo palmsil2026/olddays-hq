@@ -630,7 +630,8 @@ async function loadDashboard() {
           '<span class="muted">เมื่อวาน ' + money(y) + ' ฿</span>' +
           (pct === null ? '' : ' · <b style="color:var(--' + (pct >= 0 ? 'green' : 'red') + ')">' +
             (pct >= 0 ? '▲ +' : '▼ ') + pct + '%</b>') + '</div>';
-      } else if (yRec) {
+      } else if (yRec && dk !== yKey) {
+        // hero ไม่ใช่ของเมื่อวานอยู่แล้ว ค่อยโชว์แถวเมื่อวานเพิ่ม (กันตัวเลขซ้ำกับข้างบน)
         html += '<div style="text-align:center;font-size:13px;margin-top:2px;"><span class="muted">เมื่อวาน ' + money(yRec.Total_Sales) + ' ฿</span></div>';
       }
       if (dk !== today) html += '<div class="muted" style="text-align:center;font-size:12px;margin-top:4px;">ยอดวันนี้จะเข้าเองหลังปิดรอบ POS (อีเมลเข้า ~17:40)</div>';
