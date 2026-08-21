@@ -1624,6 +1624,9 @@ function seedHistoricalCloses() {
     { date: '2026-08-12', total: 5825.75, cash: 589.75, tct: 3202, transfer: 2035.50, over: 1.25, dcN: 7, dcT: 264.25,
       cats: { signature: 1, coffee: 15, 'premium-coffee': 8, 'non-coffee': 20, matcha: 8, 'soft-cream': 11, dirty: 1, soda: 8, beer: 1, bakery: 12 },
       prem: { 'premium-beans': 2 } },
+    { date: '2026-08-14', total: 2494.50, cash: 527, tct: 718, transfer: 1249, over: 3, dcN: 7, dcT: 150.50,
+      cats: { coffee: 14, 'non-coffee': 12, matcha: 6, 'soft-cream': 3, soda: 2, bakery: 5 },
+      note: 'Plum wine 1 (ไม่มีหมวดในระบบ ไม่นับค่าคอม)' },
   ];
 
   var cats = readRows(SHEET_TABS.CATEGORIES).filter(function (c) { return isTrue(c.Active); });
