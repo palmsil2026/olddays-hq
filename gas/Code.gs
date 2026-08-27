@@ -912,13 +912,13 @@ function pushDailySummary(record, categories, premiumItems, config) {
   return linePush(cred, [flex]);
 }
 
-function linePush(cred, messages) {
+function linePush(cred, messages, to) {
   try {
     var res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
       method: 'post',
       contentType: 'application/json',
       headers: { Authorization: 'Bearer ' + cred.token },
-      payload: JSON.stringify({ to: cred.groupId, messages: messages }),
+      payload: JSON.stringify({ to: to || cred.groupId, messages: messages }),
       muteHttpExceptions: true,
     });
     if (res.getResponseCode() === 200) return { pushed: true };
@@ -929,8 +929,9 @@ function linePush(cred, messages) {
 }
 
 /**
- * Flex Message สรุปยอดรายวัน — จัดเป็น infographic:
- * ยอดรวมตัวใหญ่ + แถบสัดส่วนช่องทางเงิน + ตารางแก้วต่อหมวด + ค่าคอม
+ * Flex Message รายงานขายรายวัน "ฉบับกลุ่มพนักงาน" — ไม่มีตัวเงินเลย
+ * โชว์ 2 ตัวเลขหลักที่ทีมต้องใช้: 🥤 แก้วที่นับค่าคอม กับ 📦 รายการทั้งหมด
+ * (ยอดเงิน/ค่าคอมเป็นเรื่องหลังบ้าน — ผู้บริหารดูในแอป หรือรับสรุปเงินทาง DM)
  */
 function buildDailyFlex(record, categories, premiumItems, config) {
   var C = {
@@ -938,112 +939,107 @@ function buildDailyFlex(record, categories, premiumItems, config) {
     dim: '#B9A58E', green: '#7FB77E', blue: '#7EA8C9', pink: '#D98BA0',
   };
   var date = thaiDate(dateKey(record.Date));
-  var total = num(record.Total_Sales);
-  var channels = [
-    { label: '💵 เงินสด', amount: num(record.Cash), color: C.green },
-    { label: '🇹🇭 ไทยช่วยไทย', amount: num(record.Thai_Chuay_Thai), color: C.blue },
-    { label: '📲 เงินโอน', amount: num(record.Transfer), color: C.pink },
-  ];
-  var channelSum = channels.reduce(function (s, c) { return s + c.amount; }, 0) || 1;
-
-  var channelRows = [];
-  channels.forEach(function (ch) {
-    var pct = Math.max(4, Math.round((ch.amount / channelSum) * 100));
-    channelRows.push({
-      type: 'box', layout: 'vertical', margin: 'md', spacing: 'xs',
-      contents: [
-        {
-          type: 'box', layout: 'horizontal',
-          contents: [
-            { type: 'text', text: ch.label, size: 'sm', color: C.cream, flex: 5 },
-            { type: 'text', text: fmtMoney(ch.amount) + ' ฿', size: 'sm', color: C.cream, align: 'end', flex: 4, weight: 'bold' },
-          ],
-        },
-        {
-          type: 'box', layout: 'vertical', backgroundColor: '#1A120D', cornerRadius: 'md', height: '6px',
-          contents: [{
-            type: 'box', layout: 'vertical', backgroundColor: ch.color, cornerRadius: 'md',
-            height: '6px', width: pct + '%', contents: [],
-          }],
-        },
-      ],
-    });
-  });
-
   var catCounts = safeParse(record.Category_Counts_JSON);
-  var catRows = [];
+
+  // แยก 2 กลุ่ม: หมวดที่นับแก้วค่าคอม กับหมวดที่ไม่นับ (เบียร์/เบเกอรี่)
+  var drinkRows = [], otherRows = [];
+  var drinkCups = 0, otherItems = 0;
   categories.forEach(function (c) {
     var count = num(catCounts[c.Category_ID]);
-    catRows.push({
-      type: 'box', layout: 'horizontal', margin: 'xs',
+    if (!count) return;   // โชว์เฉพาะที่ขายได้ การ์ดจะได้ไม่ยาวเกิน
+    var row = {
+      type: 'box', layout: 'horizontal', margin: 'sm',
       contents: [
-        { type: 'text', text: (c.Emoji ? c.Emoji + ' ' : '') + c.Name, size: 'xs', color: count ? C.cream : C.dim, flex: 6 },
-        { type: 'text', text: count + ' ' + c.Unit, size: 'xs', color: count ? C.gold : C.dim, align: 'end', flex: 3 },
+        { type: 'text', text: (c.Emoji ? c.Emoji + ' ' : '') + c.Name, size: 'sm', color: C.cream, flex: 6, wrap: true },
+        { type: 'text', text: count + ' ' + c.Unit, size: 'sm', color: C.gold, align: 'end', flex: 3, weight: 'bold' },
       ],
-    });
+    };
+    if (isTrue(c.Count_Commission)) { drinkRows.push(row); drinkCups += count; }
+    else { otherRows.push(row); otherItems += count; }
   });
+  var totalItems = drinkCups + otherItems;
+
+  // ── หัวการ์ด: แก้วค่าคอมตัวใหญ่ + รายการทั้งหมด ──
+  var body = [
+    {
+      type: 'box', layout: 'vertical', alignItems: 'center', spacing: 'none',
+      contents: [
+        { type: 'text', text: '🥤 เครื่องดื่มที่ขายได้', size: 'sm', color: C.dim },
+        { type: 'text', text: String(drinkCups), size: '3xl', weight: 'bold', color: C.gold },
+        { type: 'text', text: 'แก้ว', size: 'sm', color: C.dim },
+      ],
+    },
+    {
+      type: 'box', layout: 'horizontal', margin: 'lg', paddingAll: '10px',
+      backgroundColor: '#1A120D', cornerRadius: 'md',
+      contents: [
+        { type: 'text', text: '📦 รายการทั้งหมด', size: 'sm', color: C.cream, flex: 5 },
+        { type: 'text', text: totalItems + ' รายการ', size: 'sm', color: C.cream, align: 'end', flex: 4, weight: 'bold' },
+      ],
+    },
+  ];
+
+  if (drinkRows.length) {
+    body = body.concat([
+      { type: 'separator', margin: 'lg', color: '#4A3826' },
+      { type: 'text', text: '🥤 เครื่องดื่ม (นับแก้ว)', size: 'sm', weight: 'bold', color: C.gold, margin: 'lg' },
+    ], drinkRows, [{
+      type: 'box', layout: 'horizontal', margin: 'md',
+      contents: [
+        { type: 'text', text: 'รวมแก้วเครื่องดื่ม', size: 'xs', color: C.dim, flex: 6 },
+        { type: 'text', text: drinkCups + ' แก้ว', size: 'xs', color: C.gold, align: 'end', flex: 3, weight: 'bold' },
+      ],
+    }]);
+  }
+
+  if (otherRows.length) {
+    body = body.concat([
+      { type: 'separator', margin: 'lg', color: '#4A3826' },
+      { type: 'text', text: '🍰 อื่น ๆ (ไม่นับแก้ว)', size: 'sm', weight: 'bold', color: C.gold, margin: 'lg' },
+    ], otherRows, [{
+      type: 'box', layout: 'horizontal', margin: 'md',
+      contents: [
+        { type: 'text', text: 'รวมรายการอื่น', size: 'xs', color: C.dim, flex: 6 },
+        { type: 'text', text: otherItems + ' รายการ', size: 'xs', color: C.dim, align: 'end', flex: 3 },
+      ],
+    }]);
+  }
 
   var premCounts = safeParse(record.Premium_Counts_JSON);
   var premRows = [];
   premiumItems.forEach(function (p) {
     var count = num(premCounts[p.Item_ID]);
-    if (!count) return; // แสดงเฉพาะที่ขายได้ ไม่ให้การ์ดยาวเกิน
+    if (!count) return;
     premRows.push({
-      type: 'box', layout: 'horizontal', margin: 'xs',
+      type: 'box', layout: 'horizontal', margin: 'sm',
       contents: [
-        { type: 'text', text: (p.Emoji ? p.Emoji + ' ' : '') + p.Name, size: 'xs', color: C.cream, flex: 7, wrap: true },
-        { type: 'text', text: count + ' ' + p.Unit, size: 'xs', color: C.gold, align: 'end', flex: 2 },
+        { type: 'text', text: (p.Emoji ? p.Emoji + ' ' : '') + p.Name, size: 'sm', color: C.cream, flex: 7, wrap: true },
+        { type: 'text', text: count + ' ' + p.Unit, size: 'sm', color: C.gold, align: 'end', flex: 2, weight: 'bold' },
       ],
     });
   });
-
-  var extraRows = [
-    kvRow('ส่วนลด', num(record.Discount_Count) + ' รายการ / ' + fmtMoney(record.Discount_Total) + ' ฿', C),
-    kvRow('บิล Void', num(record.Void_Count) + ' บิล', C),
-  ];
-  if (num(record.Cash_Over) !== 0) {
-    extraRows.push(kvRow('เงินสดเกิน/ขาด', (num(record.Cash_Over) > 0 ? '+' : '') + fmtMoney(record.Cash_Over) + ' ฿', C));
-  }
-  if (num(record.Channel_Diff) !== 0) {
-    extraRows.push(kvRow('ผลต่างช่องทางเงิน', (num(record.Channel_Diff) > 0 ? '+' : '') + fmtMoney(record.Channel_Diff) + ' ฿', C));
-  }
-
-  var body = [
-    // ยอดรวม
-    {
-      type: 'box', layout: 'vertical', alignItems: 'center', spacing: 'none',
-      contents: [
-        { type: 'text', text: 'ยอดขายวันนี้', size: 'sm', color: C.dim },
-        { type: 'text', text: fmtMoney(total), size: '3xl', weight: 'bold', color: C.gold },
-        { type: 'text', text: 'บาท', size: 'sm', color: C.dim },
-      ],
-    },
-    { type: 'separator', margin: 'lg', color: '#4A3826' },
-    { type: 'text', text: 'ช่องทางรับเงิน', size: 'sm', weight: 'bold', color: C.gold, margin: 'lg' },
-  ].concat(channelRows, [
-    { type: 'separator', margin: 'lg', color: '#4A3826' },
-    { type: 'text', text: 'ยอดขายตามหมวด', size: 'sm', weight: 'bold', color: C.gold, margin: 'lg' },
-  ], catRows);
-
   if (premRows.length) {
     body = body.concat([
       { type: 'separator', margin: 'lg', color: '#4A3826' },
-      { type: 'text', text: 'เมนูพรีเมียม / อื่น ๆ', size: 'sm', weight: 'bold', color: C.gold, margin: 'lg' },
+      { type: 'text', text: '✨ เมนูพรีเมียม', size: 'sm', weight: 'bold', color: C.gold, margin: 'lg' },
     ], premRows);
   }
 
-  // (ค่าคอมเป็นเรื่องหลังบ้าน — ไม่แสดงบนการ์ดในกลุ่ม)
-  body = body.concat([
-    { type: 'separator', margin: 'lg', color: '#4A3826' },
-  ], extraRows);
-
-  if (record.Note) {
-    body.push({ type: 'text', text: '📝 ' + record.Note, size: 'xs', color: C.dim, margin: 'md', wrap: true });
+  // ── ตัวเลขปฏิบัติการ (ไม่มีเงิน): ลูกค้า/บิล จาก Note + จำนวนส่วนลด/Void ──
+  var guests = String(record.Note || '').match(/ลูกค้า (\d+) คน \/ (\d+) บิล/);
+  var opsRows = [];
+  if (guests) opsRows.push(kvRow('👥 ลูกค้า', guests[1] + ' คน / ' + guests[2] + ' บิล', C));
+  if (num(record.Discount_Count)) opsRows.push(kvRow('🏷️ ส่วนลด', num(record.Discount_Count) + ' รายการ', C));
+  if (num(record.Void_Count)) opsRows.push(kvRow('🗑️ บิล Void', num(record.Void_Count) + ' บิล', C));
+  if (opsRows.length) {
+    body = body.concat([{ type: 'separator', margin: 'lg', color: '#4A3826' }], opsRows);
   }
 
+  var fromPos = String(record.Submitted_By).indexOf('FoodStory') !== -1;
   return {
     type: 'flex',
-    altText: '☕ สรุปยอด ' + date + ' — ' + fmtMoney(total) + ' บาท',
+    altText: '☕ ' + (config.SHOP_NAME || 'Old Days') + ' ' + date + ' — เครื่องดื่ม ' + drinkCups +
+      ' แก้ว / รวม ' + totalItems + ' รายการ',
     contents: {
       type: 'bubble', size: 'mega',
       styles: { header: { backgroundColor: C.bg }, body: { backgroundColor: C.bg } },
@@ -1051,21 +1047,54 @@ function buildDailyFlex(record, categories, premiumItems, config) {
         type: 'box', layout: 'vertical', paddingAll: '16px', paddingBottom: '0px',
         contents: [
           { type: 'text', text: '☕ ' + (config.SHOP_NAME || 'Old Days'), weight: 'bold', size: 'lg', color: C.cream },
-          { type: 'text', text: 'สรุปยอดประจำวัน ' + date, size: 'sm', color: C.dim, margin: 'xs' },
+          { type: 'text', text: 'รายงานขายประจำวัน ' + date, size: 'sm', color: C.dim, margin: 'xs' },
         ],
       },
       body: { type: 'box', layout: 'vertical', paddingAll: '16px', contents: body },
       footer: {
         type: 'box', layout: 'vertical', paddingAll: '12px', backgroundColor: C.bg,
         contents: [{
-          type: 'text', size: 'xxs', color: C.dim, align: 'center',
-          text: 'ปิดยอดโดย ' + record.Submitted_By +
+          type: 'text', size: 'xxs', color: C.dim, align: 'center', wrap: true,
+          text: (fromPos ? '📩 จากรายงานปิดรอบ POS อัตโนมัติ' : 'บันทึกโดย ' + record.Submitted_By) +
             (record.Staff_On_Shift ? ' · 👥 ' + record.Staff_On_Shift : ''),
-          wrap: true,
         }],
       },
     },
   };
+}
+
+/**
+ * 💰 สรุป "ตัวเงิน" ส่งเข้า DM ของผู้บริหาร/เจ้าของเท่านั้น
+ * (การ์ดในกลุ่มไม่มีเงินแล้ว — ฝั่งผู้บริหารยังต้องเห็นยอดทุกวันโดยไม่ต้องเปิดแอป)
+ */
+function pushOwnerMoneySummary(record, config) {
+  var cred = getLineCredentials();
+  if (!cred.token) return { pushed: false, error: 'ไม่มี LINE token' };
+  var bosses = readRows(SHEET_TABS.STAFF).filter(function (s) {
+    return isTrue(s.Active) && s.LINE_User_ID &&
+      (ROLE_LEVEL[s.Role] || 0) >= ROLE_LEVEL.manager;
+  });
+  if (!bosses.length) return { pushed: false, error: 'ไม่มีผู้บริหารในทะเบียน' };
+
+  var drawer = String(record.Note || '').match(/ลิ้นชัก: [^|]+/);
+  var text = '💰 ยอดขาย ' + (config.SHOP_NAME || 'Old Days') + ' ' + thaiDate(dateKey(record.Date)) + '\n' +
+    '(ข้อความนี้ส่งเฉพาะผู้บริหาร ไม่ได้ลงกลุ่ม)\n' +
+    '━━━━━━━━━━━━━━\n' +
+    '💵 รวม ' + fmtMoney(record.Total_Sales) + ' บาท\n' +
+    '• เงินสด ' + fmtMoney(record.Cash) + '\n' +
+    '• ไทยช่วยไทย ' + fmtMoney(record.Thai_Chuay_Thai) + '\n' +
+    '• เงินโอน ' + fmtMoney(record.Transfer) + '\n' +
+    '━━━━━━━━━━━━━━\n' +
+    '🥤 เครื่องดื่ม ' + num(record.Commission_Cups) + ' แก้ว → ค่าคอม ' + fmtMoney(record.Commission_Total) + ' บาท\n' +
+    '🏷️ ส่วนลด ' + num(record.Discount_Count) + ' รายการ / ' + fmtMoney(record.Discount_Total) + ' บาท' +
+    (num(record.Void_Count) ? '\n🗑️ Void ' + num(record.Void_Count) + ' บิล / ' + fmtMoney(record.Void_Total) + ' บาท' : '') +
+    (drawer ? '\n🗄️ ' + drawer[0].trim() : '');
+
+  var sent = 0;
+  bosses.forEach(function (b) {
+    if (linePush(cred, [{ type: 'text', text: text }], String(b.LINE_User_ID)).pushed) sent++;
+  });
+  return { pushed: sent > 0, sent: sent };
 }
 
 function kvRow(label, value, C) {
@@ -1531,8 +1560,10 @@ function saveImportedClose(parsed) {
     });
   });
 
-  // ส่งการ์ดสรุปเต็มเข้ากลุ่มทันทีที่ยอดเข้า — ไม่ต้องรอคนกดยืนยัน
+  // ส่งการ์ด (จำนวนแก้ว/รายการ ไม่มีตัวเงิน) เข้ากลุ่มทันทีที่ยอดเข้า
   pushDailySummary(record, cats, [], config);
+  // ตัวเงิน+ค่าคอมส่งเข้า DM ผู้บริหารแยกต่างหาก
+  try { pushOwnerMoneySummary(record, config); } catch (e) { console.error('ownerSummary: ' + e); }
 
   // เตือนของใกล้หมด/เบิกซื้อค้าง เฉพาะเมื่อมีจริงเท่านั้น (ไม่มี = เงียบไว้ ไม่รกแชท)
   var ops = buildOpsAlertText();
