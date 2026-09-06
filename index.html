@@ -129,6 +129,8 @@
     .list-main { flex: 1; min-width: 0; }
     .list-title { font-size: 14px; font-weight: 500; }
     .list-sub { font-size: 12px; color: var(--dim); margin-top: 1px; word-break: break-word; }
+    .day-block { padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .day-block:last-child { border-bottom: none; }
 
     /* ── Stock cards ── */
     .ing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 8px; }
@@ -311,7 +313,19 @@
       <div class="card-title">📊 รายงานรายเดือน</div>
       <input type="month" id="repMonth" onchange="loadReport()" />
       <div id="repSummary" class="muted" style="margin-top:12px;">เลือกเดือนเพื่อดูรายงาน</div>
-      <div id="repCommission"></div>
+      <div class="divider"></div>
+      <div class="card-title">📈 ยอดขายรายวันทั้งเดือน</div>
+      <div id="monthChart" class="muted">–</div>
+      <div class="muted" style="font-size:11px;margin-top:2px;">
+        <span style="color:var(--gold)">■</span> จันทร์–ศุกร์ ·
+        <span style="color:var(--pink)">■</span> เสาร์–อาทิตย์ ·
+        <span style="color:var(--blue)">┄</span> เส้นค่าเฉลี่ย · แตะแท่งเพื่อดูรายละเอียดวันนั้น
+      </div>
+      <div id="chartDetail" style="margin-top:8px;"></div>
+      <div style="text-align:center;margin-top:10px;">
+        <button class="btn small secondary" id="btnCatMonth" onclick="toggleCatMonth()">🧾 ดูแยกประเภทสินค้า (ทั้งเดือน)</button>
+      </div>
+      <div id="catMonth" class="hidden" style="margin-top:6px;"></div>
       <div class="divider"></div>
       <div class="card-title">📅 ยอดขายรายสัปดาห์ (แตะวันเพื่อดูรายละเอียด)</div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
@@ -533,7 +547,7 @@ async function renderDayCard() {
     (num(r.Cash_Over) ? '<div class="sum-row"><span class="muted">💵 เงินสดเกิน/ขาด</span><span>' + money(r.Cash_Over) + ' ฿</span></div>' : '') +
     (drawer ? '<div class="sum-row"><span class="muted">🗄️ ลิ้นชักเงินสด</span><span>คาด ' + drawer[1] + ' → นับจริง ' + drawer[2] +
       ' <b style="color:var(--' + (drawer[3].charAt(0) === '+' ? 'green' : 'red') + ')">(' + esc(drawer[3]) + ')</b></span></div>' : '') +
-    (r.Staff_On_Shift ? '<div class="sum-row"><span class="muted">👥 คนเข้าวันนั้น</span><span>' + esc(r.Staff_On_Shift) + '</span></div>' : '') +
+    (r.Staff_On_Shift ? '<div class="sum-row"><span class="muted">👥 คนเข้าวันนั้น</span><span>' + esc(nickList(r.Staff_On_Shift)) + '</span></div>' : '') +
     (noteRest ? '<div class="sum-row"><span class="muted" style="font-size:12px">📝 ' + esc(noteRest) + '</span></div>' : '') +
     '<div class="sum-row"><span class="muted" style="font-size:12px">' +
     (r.Submitted_By === AUTO_SUBMITTER ? '📩 จากอีเมล POS อัตโนมัติ' : '✍️ ปิดโดย ' + esc(nickOf(r.Submitted_By))) + '</span></div>';
@@ -569,6 +583,10 @@ function myLevel() { return me ? (ROLE_LEVEL[me.Role] || 0) : 0; }
 function nickOf(name) {
   const s = staffList.find(x => x.name === name);
   return (s && s.nickname) || name;
+}
+// "ชื่อจริง, ชื่อจริง" → "ชื่อเล่น, ชื่อเล่น" (ใช้กับ Staff_On_Shift)
+function nickList(names) {
+  return String(names || '').split(',').map(x => nickOf(x.trim())).filter(Boolean).join(', ');
 }
 
 function showScreen(id) {
@@ -1053,50 +1071,93 @@ async function loadComAdmin() {
 
 function renderComAdmin() {
   const d = comState;
-  {
-    const payByDate = {};
-    (d.pays || []).forEach(p => { payByDate[p.date] = p; });
+  const payByDate = {};
+  (d.pays || []).forEach(p => { payByDate[p.date] = p; });
+  const days = (d.days || []).filter(x => x.amount > 0).sort((a, b) => b.date.localeCompare(a.date));
 
-    // ยอดค้างจ่ายรวมต่อคน
-    const unpaidBy = {};
-    (d.pays || []).forEach(p => {
-      if (p.status !== 'unpaid') return;
-      unpaidBy[p.staffName] = (unpaidBy[p.staffName] || 0) + p.amount;
-    });
-    $('comSummary').innerHTML = Object.keys(unpaidBy).length
-      ? Object.keys(unpaidBy).map(name =>
-          '<div class="list-row"><div class="list-main"><div class="list-title">' + esc(nickOf(name)) + '</div>' +
-          '<div class="list-sub">ค้างจ่ายรวม (เดือนที่เลือก)</div></div>' +
-          '<b style="color:var(--gold)">' + money(unpaidBy[name]) + ' ฿</b>' +
-          '<button class="btn small green" data-n="' + esc(name) + '" onclick="openPayAll(this.dataset.n)">💸 จ่ายรวม</button></div>'
-        ).join('')
-      : '<div class="muted" style="font-size:12px;margin-top:8px;">ไม่มียอดค้างจ่าย 🎉</div>';
-
-    // รายวัน: ยังไม่เลือกคน → แสดงชิปให้กดเลือก / เลือกแล้ว → ปุ่มจ่าย / จ่ายแล้ว → ✓
-    const days = (d.days || []).filter(x => x.amount > 0)
-      .sort((a, b) => b.date.localeCompare(a.date));
-    $('comDays').innerHTML = days.length ? days.map(day => {
-      const p = payByDate[day.date];
-      const staffChips = '<div class="chips">' + (d.staffNames || []).map(s =>
-        '<div class="chip" data-n="' + esc(s.name) + '" onclick="assignCom(\'' + day.date + '\', this.dataset.n)">' +
-        esc(s.nickname || s.name) + '</div>').join('') + '</div>';
-      let right;
-      if (!p || comReassignDate === day.date) {
-        right = staffChips; // ยังไม่เลือกคน หรือกำลังกดเปลี่ยนคนอยู่
-      } else if (p.status === 'unpaid') {
-        right = '<span class="badge pending">' + esc(nickOf(p.staffName)) + '</span> ' +
-          '<button class="btn small green" onclick="openPayDay(\'' + day.date + '\')">💸 จ่าย</button> ' +
-          '<button class="btn small secondary" onclick="reassignCom(\'' + day.date + '\')">เปลี่ยนคน</button>';
-      } else {
-        right = '<span class="badge approved">✓ จ่ายแล้ว → ' + esc(nickOf(p.staffName)) + '</span> ' +
-          '<button class="btn small danger" onclick="unpayCom(\'' + day.date + '\', this)">↩︎</button>';
-      }
-      return '<div class="list-row"><div class="list-main">' +
-        '<div class="list-title">' + thaiDate(day.date) + ' · <b style="color:var(--gold)">' + money(day.amount) + ' ฿</b></div>' +
-        '<div class="list-sub">' + day.cups + ' แก้ว</div></div>' +
-        '<div style="text-align:right;">' + right + '</div></div>';
-    }).join('') : '<span class="muted">เดือนนี้ยังไม่มียอดค่าคอม</span>';
+  // ── สรุปรวมทั้งเดือน: ต่อคน (รวม/จ่ายแล้ว/ค้าง) + วันที่ยังไม่ระบุคน ──
+  const per = {};
+  let unassignedDays = 0, unassignedAmt = 0, monthCups = 0, monthAmt = 0;
+  days.forEach(day => {
+    monthCups += day.cups; monthAmt += day.amount;
+    const p = payByDate[day.date];
+    if (!p) { unassignedDays++; unassignedAmt += day.amount; return; }
+    if (!per[p.staffName]) per[p.staffName] = { days: 0, total: 0, paid: 0, unpaid: 0 };
+    per[p.staffName].days++;
+    per[p.staffName].total += p.amount;
+    if (p.status === 'paid') per[p.staffName].paid += p.amount;
+    else per[p.staffName].unpaid += p.amount;
+  });
+  let sumHtml = '<div class="sum-row" style="margin-top:4px;"><span class="muted">ค่าคอมทั้งเดือน</span>' +
+    '<b style="color:var(--gold)">' + money(monthAmt) + ' ฿ · ' + monthCups + ' แก้ว</b></div>';
+  Object.keys(per).forEach(name => {
+    const x = per[name];
+    sumHtml += '<div class="list-row"><div class="list-main">' +
+      '<div class="list-title">' + esc(nickOf(name)) + ' <span class="muted" style="font-size:12px">· ' + x.days + ' วัน · รวม ' + money(x.total) + ' ฿</span></div>' +
+      '<div class="list-sub">' + (x.paid ? '✅ จ่ายแล้ว ' + money(x.paid) + ' ฿' : '') +
+      (x.paid && x.unpaid ? ' · ' : '') +
+      (x.unpaid ? '⏳ ค้างจ่าย ' + money(x.unpaid) + ' ฿' : '') + '</div></div>' +
+      (x.unpaid
+        ? '<button class="btn small green" data-n="' + esc(name) + '" onclick="openPayAll(this.dataset.n)">💸 จ่ายค้าง</button>'
+        : '<span class="badge approved">✓ ครบ</span>') +
+      '</div>';
+  });
+  if (unassignedDays) {
+    sumHtml += '<div class="sum-row"><span style="color:var(--red)">⚠️ ยังไม่ระบุคนรับ</span>' +
+      '<span>' + unassignedDays + ' วัน · ' + money(unassignedAmt) + ' ฿</span></div>';
   }
+  $('comSummary').innerHTML = sumHtml;
+
+  // ── รายวัน: 👥 ใครเข้ากะ (เลือกหลายคน บันทึกเอง) → 💰 ค่าคอมของใคร (คนเดียว) ──
+  $('comDays').innerHTML = days.length ? days.map(day => {
+    const p = payByDate[day.date];
+    const onShift = String(day.shift || '').split(',').map(x => x.trim()).filter(Boolean);
+    const shiftChips = '<div class="chips" style="margin-top:4px;">' + (d.staffNames || []).map(st =>
+      '<div class="chip' + (onShift.includes(st.name) ? ' on' : '') + '" data-n="' + esc(st.name) + '" ' +
+      'onclick="toggleShift(\'' + day.date + '\', this)">' + esc(st.nickname || st.name) + '</div>').join('') + '</div>';
+
+    // ชิปเลือกคนรับค่าคอม — คนที่เข้ากะขึ้นก่อนพร้อม ✓ จะได้กดไม่พลาด
+    const ordered = (d.staffNames || []).slice().sort((a, b) =>
+      (onShift.includes(b.name) ? 1 : 0) - (onShift.includes(a.name) ? 1 : 0));
+    const assignChips = '<div class="chips" style="margin-top:4px;">' + ordered.map(st =>
+      '<div class="chip" data-n="' + esc(st.name) + '" onclick="assignCom(\'' + day.date + '\', this.dataset.n)">' +
+      (onShift.includes(st.name) ? '✓ ' : '') + esc(st.nickname || st.name) + '</div>').join('') + '</div>';
+
+    let comLine;
+    if (!p || comReassignDate === day.date) {
+      comLine = assignChips;
+    } else if (p.status === 'unpaid') {
+      comLine = '<div style="margin-top:4px;"><span class="badge pending">' + esc(nickOf(p.staffName)) + ' · รอจ่าย</span> ' +
+        '<button class="btn small green" onclick="openPayDay(\'' + day.date + '\')">💸 จ่าย</button> ' +
+        '<button class="btn small secondary" onclick="reassignCom(\'' + day.date + '\')">เปลี่ยนคน</button></div>';
+    } else {
+      comLine = '<div style="margin-top:4px;"><span class="badge approved">✓ จ่ายแล้ว → ' + esc(nickOf(p.staffName)) + '</span> ' +
+        '<button class="btn small danger" onclick="unpayCom(\'' + day.date + '\', this)">↩︎</button></div>';
+    }
+
+    return '<div class="day-block">' +
+      '<div class="sum-row" style="margin-top:0;"><b>' + thDayName(day.date) + ' ' + thaiDate(day.date) + '</b>' +
+      '<span>' + day.cups + ' แก้ว · <b style="color:var(--gold)">' + money(day.amount) + ' ฿</b></span></div>' +
+      '<div class="muted" style="font-size:12px;margin-top:6px;">👥 ใครเข้ากะ (แตะเลือกได้หลายคน ระบบบันทึกให้เอง)</div>' + shiftChips +
+      '<div class="muted" style="font-size:12px;margin-top:8px;">💰 ค่าคอมของ</div>' + comLine +
+      '</div>';
+  }).join('') : '<span class="muted">เดือนนี้ยังไม่มียอดค่าคอม</span>';
+}
+
+// แตะชิปเข้ากะ = toggle แล้วบันทึกอัตโนมัติ (หน่วง 0.7 วิ กันยิงถี่ตอนกดหลายคนติดกัน)
+const shiftSaveTimers = {};
+function toggleShift(date, chipEl) {
+  chipEl.classList.toggle('on');
+  const names = Array.from(chipEl.parentElement.querySelectorAll('.chip.on')).map(c => c.dataset.n);
+  const day = (comState.days || []).find(x => x.date === date);
+  if (day) day.shift = names.join(', ');
+  clearTimeout(shiftSaveTimers[date]);
+  shiftSaveTimers[date] = setTimeout(async () => {
+    try {
+      await api({ action: 'saveShift', date, names: names.join(', ') });
+      showToast('👥 บันทึกคนเข้ากะ ' + thaiDate(date) + ' ✓');
+    } catch (e) { showToast('บันทึกเข้ากะไม่สำเร็จ: ' + e.message, 4000); }
+  }, 700);
 }
 
 function reassignCom(date) {
@@ -1220,15 +1281,158 @@ async function loadReport() {
       '<div class="stat"><div class="v">' + money(t.transfer) + '</div><div class="l">เงินโอน</div></div>' +
       '<div class="stat"><div class="v">' + (t.days ? money(t.sales / t.days) : '–') + '</div><div class="l">เฉลี่ยต่อวัน</div></div>' +
       '</div>';
-    // ค่าคอมรายคนไม่แสดงในรายงาน — เจ้าของดูได้ในแท็บ Commission ของ Google Sheet
-    $('repCommission').innerHTML = '';
-
-    // 📅 ปฏิทินสัปดาห์ใช้ข้อมูลเดือนเดียวกัน — เก็บลง cache แล้ววาดใหม่
+    // 📅 กราฟ/ปฏิทินสัปดาห์/แยกประเภท ใช้ข้อมูลเดือนเดียวกัน — เก็บลง cache แล้ววาดใหม่
     monthCache[month] = d.days || [];
+    renderMonthChart(month);
+    if (!$('catMonth').classList.contains('hidden')) renderCatMonth();
     renderWeek();
   } catch (e) {
     $('repSummary').textContent = e.message;
   }
+}
+
+// ══════════ 📈 กราฟยอดขายรายวันทั้งเดือน (SVG ไม่พึ่งไลบรารี) ══════════
+let chartMatrix = null;
+let chartSelIdx = -1;
+
+// เตรียมข้อมูลเป็นช่องรายวันครบทั้งเดือน (วันไม่มียอด = null) — แยกเป็น pure function ไว้เทสได้
+function monthMatrix(month, days) {
+  const p = month.split('-');
+  const nDays = new Date(Number(p[0]), Number(p[1]), 0).getDate();
+  const byDate = {};
+  (days || []).forEach(r => { byDate[String(r.Date).slice(0, 10)] = r; });
+  const list = [];
+  let max = 0, sum = 0, count = 0;
+  for (let i = 1; i <= nDays; i++) {
+    const iso = month + '-' + String(i).padStart(2, '0');
+    const r = byDate[iso] || null;
+    const v = r ? num(r.Total_Sales) : 0;
+    list.push({ iso, r, v });
+    if (r) { max = Math.max(max, v); sum += v; count++; }
+  }
+  return { list, max, sum, count, avg: count ? sum / count : 0 };
+}
+
+function renderMonthChart(month) {
+  chartMatrix = monthMatrix(month, monthCache[month] || []);
+  const M = chartMatrix;
+  chartSelIdx = -1;
+  if (!M.count) {
+    $('monthChart').innerHTML = '<span class="muted">เดือนนี้ยังไม่มียอดขาย</span>';
+    $('chartDetail').innerHTML = '';
+    return;
+  }
+  const W = 640, H = 230, padT = 20, padB = 26, padX = 6;
+  const plotH = H - padT - padB;
+  const bw = (W - padX * 2) / M.list.length;
+  const avgY = padT + plotH * (1 - M.avg / M.max);
+  let svg = '<line x1="' + padX + '" y1="' + avgY.toFixed(1) + '" x2="' + (W - padX) +
+    '" y2="' + avgY.toFixed(1) + '" stroke="#7EA8C9" stroke-dasharray="4 4" stroke-width="1"/>';
+  M.list.forEach((dpt, i) => {
+    const x = padX + i * bw;
+    const barW = Math.max(2, bw - 2.4).toFixed(1);
+    if (dpt.r) {
+      const h = Math.max(3, plotH * dpt.v / M.max);
+      const wd = new Date(dpt.iso + 'T00:00:00').getDay();
+      svg += '<rect id="mbar-' + i + '" x="' + (x + 1).toFixed(1) + '" y="' + (padT + plotH - h).toFixed(1) +
+        '" width="' + barW + '" height="' + h.toFixed(1) + '" rx="2" fill="' +
+        ((wd === 0 || wd === 6) ? '#D98BA0' : '#D9A05B') + '" style="cursor:pointer" onclick="chartPick(' + i + ')"/>';
+    } else {
+      svg += '<rect x="' + (x + 1).toFixed(1) + '" y="' + (padT + plotH - 1.5).toFixed(1) +
+        '" width="' + barW + '" height="1.5" fill="#4A3826"/>';
+    }
+    const dayNo = i + 1;
+    if (dayNo === 1 || dayNo % 5 === 0) {
+      svg += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" font-size="11" fill="#B9A58E" text-anchor="middle">' + dayNo + '</text>';
+    }
+  });
+  svg += '<text x="' + padX + '" y="12" font-size="11" fill="#B9A58E">สูงสุด ' + money(M.max) +
+    ' ฿ · เฉลี่ย ' + money(M.avg) + ' ฿/วัน (' + M.count + ' วันขาย)</text>';
+  $('monthChart').innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;">' + svg + '</svg>';
+  // เปิดมาเลือกวันล่าสุดที่มียอดให้เลย
+  let last = -1;
+  M.list.forEach((dpt, i) => { if (dpt.r) last = i; });
+  chartPick(last);
+}
+
+function chartPick(i) {
+  const M = chartMatrix;
+  if (!M || !M.list[i] || !M.list[i].r) return;
+  const prev = document.getElementById('mbar-' + chartSelIdx);
+  if (prev) prev.setAttribute('stroke', 'none');
+  const cur = document.getElementById('mbar-' + i);
+  if (cur) { cur.setAttribute('stroke', '#F5EBDD'); cur.setAttribute('stroke-width', '1.6'); }
+  chartSelIdx = i;
+  const r = M.list[i].r;
+  // หมวดที่ขายได้ของวันนั้นแบบบรรทัดสั้น ๆ + ปุ่มเจาะดูเต็ม
+  const cats = [];
+  try {
+    const counts = JSON.parse(r.Category_Counts_JSON || '{}');
+    categories.forEach(c => {
+      const n = num(counts[c.Category_ID]);
+      if (n) cats.push((c.Emoji ? c.Emoji + ' ' : '') + esc(c.Name) + ' ' + n);
+    });
+  } catch (e) {}
+  $('chartDetail').innerHTML =
+    '<div class="sum-row" style="margin-top:4px;"><b>' + thDayName(M.list[i].iso) + ' ' + thaiDate(M.list[i].iso) + '</b>' +
+    '<b style="color:var(--gold)">' + money(r.Total_Sales) + ' ฿</b></div>' +
+    (cats.length ? '<div class="muted" style="font-size:12px;margin-top:2px;line-height:1.9;">' + cats.join(' · ') + '</div>' : '') +
+    '<button class="btn small secondary" style="margin-top:6px;" onclick="showDayDetailRecord(chartMatrix.list[' + i + '].r)">🔍 ดูรายละเอียดเต็มของวันนี้</button>';
+}
+
+// ══════════ 🧾 แยกประเภทสินค้าทั้งเดือน ══════════
+function sumCategoryCounts(days) {
+  const cat = {}, prem = {};
+  (days || []).forEach(r => {
+    try {
+      const c = JSON.parse(r.Category_Counts_JSON || '{}');
+      Object.keys(c).forEach(k => { cat[k] = (cat[k] || 0) + num(c[k]); });
+    } catch (e) {}
+    try {
+      const p = JSON.parse(r.Premium_Counts_JSON || '{}');
+      Object.keys(p).forEach(k => { prem[k] = (prem[k] || 0) + num(p[k]); });
+    } catch (e) {}
+  });
+  return { cat, prem };
+}
+
+function toggleCatMonth() {
+  const el = $('catMonth');
+  el.classList.toggle('hidden');
+  $('btnCatMonth').textContent = el.classList.contains('hidden')
+    ? '🧾 ดูแยกประเภทสินค้า (ทั้งเดือน)' : '🔼 ซ่อนแยกประเภทสินค้า';
+  if (!el.classList.contains('hidden')) renderCatMonth();
+}
+
+function renderCatMonth() {
+  const month = $('repMonth').value;
+  const t = sumCategoryCounts(monthCache[month] || []);
+  const maxC = Math.max(1, ...categories.map(c => t.cat[c.Category_ID] || 0));
+  let drinks = 0, others = 0, html = '';
+  categories.forEach(c => {
+    const n = t.cat[c.Category_ID] || 0;
+    if (!n) return;
+    const isCom = c.Count_Commission === true || c.Count_Commission === 'TRUE' || c.Count_Commission === 'true';
+    if (isCom) drinks += n; else others += n;
+    const w = Math.max(3, Math.round(n / maxC * 100));
+    html += '<div class="sum-row"><span class="muted">' + (c.Emoji ? c.Emoji + ' ' : '') + esc(c.Name) +
+      (isCom ? '' : ' <span style="font-size:10px">(ไม่นับแก้ว)</span>') + '</span><b>' + n + ' ' + esc(c.Unit) + '</b></div>' +
+      '<div class="bar-track"><div class="bar-fill" style="width:' + w + '%;background:' +
+      (isCom ? 'var(--gold)' : 'var(--dim)') + '"></div></div>';
+  });
+  let premHtml = '';
+  premiumItems.forEach(p => {
+    const n = t.prem[p.Item_ID] || 0;
+    if (!n) return;
+    premHtml += '<div class="sum-row"><span class="muted">' + (p.Emoji ? p.Emoji + ' ' : '✨ ') + esc(p.Name) +
+      '</span><b>' + n + ' ' + esc(p.Unit) + '</b></div>';
+  });
+  $('catMonth').innerHTML = html
+    ? html + '<div class="divider"></div>' +
+      '<div class="sum-row"><span class="muted">🥤 เครื่องดื่มรวม (นับค่าคอม)</span><b style="color:var(--gold)">' + drinks + ' แก้ว</b></div>' +
+      '<div class="sum-row"><span class="muted">📦 รวมทุกประเภท</span><b>' + (drinks + others) + ' รายการ</b></div>' +
+      (premHtml ? '<div class="divider"></div><div class="card-title" style="margin-bottom:4px;">✨ เมนูพรีเมียม</div>' + premHtml : '')
+    : '<span class="muted">เดือนนี้ยังไม่มีข้อมูล</span>';
 }
 
 // ══════════ ปฏิทินสัปดาห์ (จันทร์–อาทิตย์ เลื่อนสัปดาห์ได้) ══════════
@@ -1331,7 +1535,7 @@ function showDayDetailRecord(r) {
   html += '<div class="divider"></div>' +
     '<div class="sum-row"><span class="muted">ส่วนลด</span><span>' + num(r.Discount_Count) + ' รายการ / ' + money(r.Discount_Total) + ' ฿</span></div>' +
     '<div class="sum-row"><span class="muted">บิล Void</span><span>' + num(r.Void_Count) + ' บิล</span></div>';
-  if (r.Staff_On_Shift) html += '<div class="sum-row"><span class="muted">👥 คนเข้าวันนี้</span><span>' + esc(r.Staff_On_Shift) + '</span></div>';
+  if (r.Staff_On_Shift) html += '<div class="sum-row"><span class="muted">👥 คนเข้าวันนี้</span><span>' + esc(nickList(r.Staff_On_Shift)) + '</span></div>';
   if (r.Note) html += '<div class="sum-row"><span class="muted" style="font-size:12px">📝 ' + esc(r.Note) + '</span></div>';
 
   $('dayModalContent').innerHTML = html;

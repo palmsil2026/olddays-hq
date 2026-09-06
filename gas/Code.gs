@@ -174,6 +174,7 @@ function route(action, req) {
     case 'payAllCommission':   return actionPayAllCommission(req);
     case 'unpayCommission':    return actionUnpayCommission(req);
     case 'saveStaffPay':       return actionSaveStaffPay(req);
+    case 'saveShift':          return actionSaveShift(req);
     case 'disableIngredient':  return actionDisableIngredient(req);
 
     // ── สต๊อก ──
@@ -1128,6 +1129,7 @@ function actionGetCommissionAdmin(req) {
       cups: num(r.Commission_Cups),
       amount: num(r.Commission_Total),
       submittedBy: r.Submitted_By,
+      shift: String(r.Staff_On_Shift || ''),
     };
   });
 
@@ -1148,6 +1150,21 @@ function actionGetCommissionAdmin(req) {
     .map(function (s) { return { name: s.Name, nickname: s.Nickname }; });
 
   return { days: days, pays: pays, staffPay: staffPay, staffNames: staffNames };
+}
+
+/** 👥 บันทึกว่าใครเข้ากะวันไหน (หลังบ้าน manager+) — เก็บใน Staff_On_Shift ของ DailyClose
+ *  ใช้จากหน้าจ่ายค่าคอม: แตะชิปชื่อ = บันทึกทันที เปลี่ยนกี่รอบก็ได้ (เขียนทับค่าเดิม) */
+function actionSaveShift(req) {
+  requireRole(req, 'manager');
+  var date = String(req.date || '');
+  var rows = readRows(SHEET_TABS.DAILY).filter(function (r) { return dateKey(r.Date) === date; });
+  if (!rows.length) throw new Error('ไม่พบยอดของวันที่นี้');
+  var rec = rows[rows.length - 1];
+  var idx = rec._rowIndex;
+  delete rec._rowIndex;
+  rec.Staff_On_Shift = String(req.names || '').trim();
+  updateRowObj(SHEET_TABS.DAILY, idx, rec);
+  return { date: date, names: rec.Staff_On_Shift };
 }
 
 function findComPayRow(date) {
