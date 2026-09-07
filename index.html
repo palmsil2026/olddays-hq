@@ -593,6 +593,11 @@
     <div class="grab"></div>
     <div class="sheet-h"><h3>⚙️ เพิ่มเติม</h3><button class="x" onclick="closeSheet('shSettings')">✕</button></div>
     <div class="card tight" id="setProfile"></div>
+    <div class="card" id="setPreview">
+      <div class="b brown">👀 มุมมองพนักงาน</div>
+      <p class="muted small" style="margin:4px 0 2px;line-height:1.5;">พนักงานเห็นทุกอย่างเป็นแก้ว / บิล / ครั้ง ไม่มีตัวเลขบาท — กดเพื่อดูว่าพนักงานเห็นอะไร</p>
+      <button class="btn ghost" id="btnPreview" onclick="togglePreview()">👀 ดูแบบพนักงาน</button>
+    </div>
     <div class="card">
       <div class="b brown">📩 ดึงยอดจาก POS (Gmail)</div>
       <p class="muted small" style="margin:4px 0 2px;line-height:1.5;">ปกติระบบดึงเองทุก 15 นาทีช่วงเย็น — ปุ่มนี้ไว้กดดึงทันทีถ้ายอดยังไม่เข้า</p>
@@ -625,6 +630,7 @@ let poCache = [];
 let currentIngredient = null;
 let moveType = 'in';
 let currentTab = 'home';
+let previewStaff = false;   // ผู้บริหารกด "ดูแบบพนักงาน" เพื่อเช็คว่าพนักงานเห็นอะไร
 const monthCache = {};
 
 const ROLE_TH = { owner: 'เจ้าของร้าน', manager: 'ผู้บริหาร', barista: 'บาริสต้า' };
@@ -675,6 +681,11 @@ function thaiMonth(month) {        // สิงหาคม 2569
 }
 function myLevel() { return me ? (ROLE_LEVEL[me.Role] || 0) : 0; }
 function isMgr() { return myLevel() >= ROLE_LEVEL.manager; }
+// โหมดพนักงาน: ไม่โชว์ตัวเงินเลย ทุกอย่างเป็นแก้ว/บิล/ครั้ง (บาริสต้า หรือผู้บริหารกดดูแบบพนักงาน)
+function cupsMode() { return !isMgr() || previewStaff; }
+function dayVal(r) { return cupsMode() ? num(r.Commission_Cups) : num(r.Total_Sales); }
+function fmtVal(v) { return cupsMode() ? num(v).toLocaleString('en-US') + ' แก้ว' : money0(v) + ' ฿'; }
+function unitLbl() { return cupsMode() ? 'แก้ว' : 'บาท'; }
 function nickOf(name) { const s = staffList.find(x => x.name === name); return (s && s.nickname) || name; }
 function nickList(names) { return String(names || '').split(',').map(x => nickOf(x.trim())).filter(Boolean).join(', '); }
 function isComCat(c) { return c.Count_Commission === true || c.Count_Commission === 'TRUE' || c.Count_Commission === 'true'; }
@@ -689,9 +700,11 @@ function parseNote(r) {
   const note = String(r.Note || '').replace(/^📩 ดึงจากอีเมล POS \| /, '');
   const bills = note.match(/ลูกค้า (\d+) คน \/ (\d+) บิล/);
   const drawer = note.match(/ลิ้นชัก: คาด ([\d,.-]+) จริง ([\d,.-]+) \(([^)]+)\)/);
-  const rest = note.replace(/ลูกค้า \d+ คน \/ \d+ บิล/, '').replace(/ลิ้นชัก:[^|]*/, '')
+  const ch = note.match(/ช่องทาง: เงินสด (\d+) \/ โอน (\d+) \/ ไทยช่วยไทย (\d+) ครั้ง/);
+  const rest = note.replace(/ลูกค้า \d+ คน \/ \d+ บิล/, '').replace(/ลิ้นชัก:[^|]*/, '').replace(/ช่องทาง:[^|]*/, '')
     .split('|').map(x => x.trim()).filter(Boolean).join(' · ');
-  return { guests: bills ? num(bills[1]) : 0, bills: bills ? num(bills[2]) : 0, drawer, rest };
+  return { guests: bills ? num(bills[1]) : 0, bills: bills ? num(bills[2]) : 0, drawer, rest,
+    ch: ch ? { cash: num(ch[1]), transfer: num(ch[2]), tct: num(ch[3]) } : null };
 }
 
 function showToast(msg, duration = 2800) {
@@ -810,7 +823,7 @@ function enterApp() {
   const nick = me.Nickname || me.Name;
   $('tbAvatar').textContent = initial(nick);
   $('tbName').textContent = 'สวัสดี ' + nick;
-  $('tbRole').textContent = (ROLE_TH[me.Role] || me.Role) + ' · ' + config.shopName;
+  $('tbRole').textContent = (ROLE_TH[me.Role] || me.Role) + ' · ' + config.shopName + (previewStaff ? ' · 👀 ดูแบบพนักงาน' : '');
   const nav = $('bottomNav');
   nav.innerHTML = '<div class="brand"><div class="logo" style="width:44px;height:44px;border-radius:14px;font-size:22px;margin:0;box-shadow:none">☕</div><div><div class="b brown" style="font-size:17px;line-height:1.1">' + esc(config.shopName) + '</div><div class="muted" style="font-size:11.5px">ระบบหลังบ้านร้าน</div></div></div>' + TABS.filter(t => !t.minRole || myLevel() >= ROLE_LEVEL[t.minRole]).map(t =>
     '<button data-tab="' + t.id + '" onclick="showTab(\'' + t.id + '\')"><span class="ico">' + t.ico + '</span>' + t.label + '</button>').join('');
@@ -849,12 +862,20 @@ async function loadHome() {
     const days = await monthDays(month);
     const t = days._totals || { sales: 0, days: 0, discount: 0 };
     const cups = days.reduce((s, r) => s + num(r.Commission_Cups), 0);
-    let tiles =
+    let tiles;
+    if (cupsMode()) {
+      const bills = days.reduce((s, r) => s + parseNote(r).bills, 0);
+      tiles =
+        '<div class="tile gold"><div class="ic">🥤</div><div class="v">' + cups + '<small>แก้ว</small></div><div class="k">เครื่องดื่มรวม</div></div>' +
+        '<div class="tile"><div class="ic">📅</div><div class="v">' + t.days + '<small>วัน</small></div><div class="k">วันที่มียอดขาย</div></div>' +
+        '<div class="tile"><div class="ic">📈</div><div class="v">' + (t.days ? Math.round(cups / t.days) : '–') + '<small>แก้ว</small></div><div class="k">เฉลี่ยต่อวัน</div></div>' +
+        '<div class="tile"><div class="ic">🧾</div><div class="v">' + (bills || '–') + '<small>บิล</small></div><div class="k">บิลทั้งเดือน</div></div>';
+    } else tiles =
       '<div class="tile gold"><div class="ic">💰</div><div class="v">' + money0(t.sales) + '<small>฿</small></div><div class="k">ยอดขายรวม</div></div>' +
       '<div class="tile"><div class="ic">📅</div><div class="v">' + t.days + '<small>วัน</small></div><div class="k">วันที่มียอดขาย</div></div>' +
       '<div class="tile"><div class="ic">📈</div><div class="v">' + (t.days ? money0(t.sales / t.days) : '–') + '<small>฿</small></div><div class="k">เฉลี่ยต่อวัน</div></div>' +
       '<div class="tile"><div class="ic">🥤</div><div class="v">' + cups + '<small>แก้ว</small></div><div class="k">เครื่องดื่มรวม</div></div>';
-    if (t.commission != null) {
+    if (!cupsMode() && t.commission != null) {
       tiles += '<div class="tile"><div class="ic">🏷️</div><div class="v">' + money0(t.discount) + '<small>฿</small></div><div class="k">ส่วนลดรวม</div></div>' +
         '<div class="tile"><div class="ic">💸</div><div class="v">' + money0(t.commission) + '<small>฿</small></div><div class="k">ค่าคอมทั้งเดือน</div></div>';
     }
@@ -924,23 +945,25 @@ async function renderDayHero() {
       const lr = byDate[lastIso];
       $('dayDetail').innerHTML = '<div class="card"><div class="sec-h" style="margin:0 0 6px"><h2 style="font-size:14.5px">📋 ยอดล่าสุด · ' + thDayName(lastIso) + ' ' + thaiDateShort(lastIso) + '</h2>' +
         '<button class="act" onclick="dayCursor=\'' + lastIso + '\';renderDayHero()">ดูวันนั้น ›</button></div>' +
-        '<div class="kv" style="padding:0 0 8px"><span class="k">ยอดขาย</span><span class="v" style="font-size:22px">' + money(lr.Total_Sales) + ' ฿</span></div>' +
+        '<div class="kv" style="padding:0 0 8px"><span class="k">' + (cupsMode() ? 'เครื่องดื่ม' : 'ยอดขาย') + '</span><span class="v" style="font-size:22px">' + (cupsMode() ? fmtVal(lr.Commission_Cups) : money(lr.Total_Sales) + ' ฿') + '</span></div>' +
         dayBodyHTML(lr, true) + '</div>';
     } else $('dayDetail').innerHTML = '';
     return;
   }
 
-  const n = parseNote(r);
-  html += '<div class="hero-amt"><div class="lbl">ยอดขาย</div><div class="v">' + money(r.Total_Sales) + '<small>บาท</small></div>';
-  if (prev && num(prev.Total_Sales) > 0) {
-    const p = Math.round((num(r.Total_Sales) - num(prev.Total_Sales)) / num(prev.Total_Sales) * 100);
-    html += '<div class="delta ' + (p >= 0 ? 'up' : 'down') + '"><b>' + (p >= 0 ? '▲ +' : '▼ ') + p + '%</b> เทียบ' + (iso === today ? 'เมื่อวาน' : 'วันก่อน') + ' ' + money0(prev.Total_Sales) + ' ฿</div>';
+  const n = parseNote(r), cm = cupsMode();
+  const cur = dayVal(r), pv = prev ? dayVal(prev) : 0;
+  html += '<div class="hero-amt"><div class="lbl">' + (cm ? 'เครื่องดื่มที่ทำได้' : 'ยอดขาย') + '</div><div class="v">' + (cm ? cur : money(r.Total_Sales)) + '<small>' + unitLbl() + '</small></div>';
+  if (prev && pv > 0) {
+    const p = Math.round((cur - pv) / pv * 100);
+    html += '<div class="delta ' + (p >= 0 ? 'up' : 'down') + '"><b>' + (p >= 0 ? '▲ +' : '▼ ') + p + '%</b> เทียบ' + (iso === today ? 'เมื่อวาน' : 'วันก่อน') + ' ' + fmtVal(pv) + '</div>';
   }
   html += '</div>';
   html += '<div class="hero-mini">' +
-    '<div><div class="v">' + num(r.Commission_Cups) + '</div><div class="k">🥤 แก้ว</div></div>' +
-    '<div><div class="v">' + (n.bills || '–') + '</div><div class="k">🧾 บิล' + (n.guests ? ' · ' + n.guests + ' คน' : '') + '</div></div>' +
-    '<div><div class="v">' + (n.bills ? money0(num(r.Total_Sales) / n.bills) : '–') + '</div><div class="k">฿ ต่อบิล</div></div></div>' +
+    (cm ? '<div><div class="v">' + (n.guests || '–') + '</div><div class="k">👥 ลูกค้า</div></div>' : '<div><div class="v">' + num(r.Commission_Cups) + '</div><div class="k">🥤 แก้ว</div></div>') +
+    '<div><div class="v">' + (n.bills || '–') + '</div><div class="k">🧾 บิล' + (!cm && n.guests ? ' · ' + n.guests + ' คน' : '') + '</div></div>' +
+    (cm ? '<div><div class="v">' + num(r.Discount_Count) + '</div><div class="k">🏷️ ส่วนลด (ครั้ง)</div></div>'
+        : '<div><div class="v">' + (n.bills ? money0(num(r.Total_Sales) / n.bills) : '–') + '</div><div class="k">฿ ต่อบิล</div></div>') + '</div>' +
     (iso !== today ? '<button class="today-btn" onclick="goToday()">กลับมาวันนี้</button>' : '');
   $('dayHero').innerHTML = html;
 
@@ -949,24 +972,30 @@ async function renderDayHero() {
 }
 
 // ── HTML รายละเอียดของวันหนึ่ง ใช้ทั้งหน้าแรกและ sheet ──
+function channelsHTML(ch, unit) {
+  const sum = ch.reduce((s, c) => s + c.a, 0) || 1;
+  return '<div class="stack">' + ch.map(c => '<i style="width:' + Math.max(1, c.a / sum * 100) + '%;background:' + c.c + '"></i>').join('') + '</div>' +
+    '<div class="legend">' + ch.map(c => '<div><span class="dot" style="background:' + c.c + '"></span>' + c.l + '<b>' + (unit === 'ครั้ง' ? c.a + ' ครั้ง' : money(c.a)) +
+      ' <small class="muted" style="font-weight:400">' + pct(c.a, sum) + '%</small></b></div>').join('') + '</div>';
+}
 function dayBodyHTML(r, compact) {
-  const n = parseNote(r);
-  const ch = [
-    { l: 'เงินสด', a: num(r.Cash), c: 'var(--green)' },
-    { l: 'ไทยช่วยไทย', a: num(r.Thai_Chuay_Thai), c: 'var(--blue)' },
-    { l: 'เงินโอน', a: num(r.Transfer), c: 'var(--pink)' },
-  ];
-  const chSum = ch.reduce((s, c) => s + c.a, 0) || 1;
-  let html = '<div class="sec-h" style="margin:0"><h2 style="font-size:14.5px">💳 ช่องทางรับเงิน</h2><span class="tag">' + money(chSum) + ' ฿</span></div>' +
-    '<div class="stack">' + ch.map(c => '<i style="width:' + Math.max(1, c.a / chSum * 100) + '%;background:' + c.c + '"></i>').join('') + '</div>' +
-    '<div class="legend">' + ch.map(c => '<div><span class="dot" style="background:' + c.c + '"></span>' + c.l + '<b>' + money(c.a) + '</b></div>').join('') + '</div>';
+  const n = parseNote(r), cm = cupsMode();
+  let html = '';
+  if (cm) {
+    // โหมดพนักงาน: ช่องทางเป็น "ครั้ง" (มีเฉพาะยอดที่ดึงจากอีเมลหลังอัปเดต GAS)
+    if (n.ch) html += '<div class="sec-h" style="margin:0"><h2 style="font-size:14.5px">💳 ช่องทางรับเงิน</h2><span class="tag">' + (n.ch.cash + n.ch.transfer + n.ch.tct) + ' ครั้ง</span></div>' +
+      channelsHTML([{ l: 'เงินสด', a: n.ch.cash, c: 'var(--green)' }, { l: 'ไทยช่วยไทย', a: n.ch.tct, c: 'var(--blue)' }, { l: 'เงินโอน', a: n.ch.transfer, c: 'var(--pink)' }], 'ครั้ง') + '<div class="divider"></div>';
+  } else {
+    const ch = [{ l: 'เงินสด', a: num(r.Cash), c: 'var(--green)' }, { l: 'ไทยช่วยไทย', a: num(r.Thai_Chuay_Thai), c: 'var(--blue)' }, { l: 'เงินโอน', a: num(r.Transfer), c: 'var(--pink)' }];
+    html += '<div class="sec-h" style="margin:0"><h2 style="font-size:14.5px">💳 ช่องทางรับเงิน</h2><span class="tag">' + money(ch.reduce((s, c) => s + c.a, 0)) + ' ฿</span></div>' + channelsHTML(ch, '฿') + '<div class="divider"></div>';
+  }
 
   // หมวดสินค้า
   const counts = parseJSON(r.Category_Counts_JSON);
   const rows = categories.map(c => ({ c, n: num(counts[c.Category_ID]) })).filter(x => x.n > 0);
   if (rows.length) {
     const max = Math.max(...rows.map(x => x.n));
-    html += '<div class="divider"></div><div class="sec-h" style="margin:0 0 2px"><h2 style="font-size:14.5px">🧾 ขายตามหมวด</h2><span class="tag">🥤 ' + num(r.Commission_Cups) + ' แก้ว</span></div>' +
+    html += '<div class="sec-h" style="margin:0 0 2px"><h2 style="font-size:14.5px">🧾 ขายตามหมวด</h2><span class="tag">' + (cm ? '💸 นับค่าคอม ' : '🥤 ') + num(r.Commission_Cups) + ' แก้ว</span></div>' +
       rows.map(x => '<div class="brow"><div class="em">' + (x.c.Emoji || (isComCat(x.c) ? '🥤' : '📦')) + '</div><div class="nm">' + esc(x.c.Name) +
         (isComCat(x.c) ? '' : ' <span class="muted" style="font-size:11px">(ไม่นับแก้ว)</span>') +
         '<div class="track"><div class="fill' + (isComCat(x.c) ? '' : ' dim') + '" style="width:' + Math.max(3, x.n / max * 100) + '%"></div></div></div>' +
@@ -981,13 +1010,13 @@ function dayBodyHTML(r, compact) {
 
   // ตัวเลขปฏิบัติการ
   html += '<div class="divider"></div>' +
-    (n.bills ? '<div class="kv"><span class="k">👥 ลูกค้า / บิล</span><span class="v">' + n.guests + ' คน · ' + n.bills + ' บิล · เฉลี่ย ' + money0(num(r.Total_Sales) / n.bills) + ' ฿</span></div>' : '') +
-    '<div class="kv"><span class="k">🏷️ ส่วนลด</span><span class="v">' + num(r.Discount_Count) + ' รายการ · ' + money(r.Discount_Total) + ' ฿</span></div>' +
-    (num(r.Void_Count) ? '<div class="kv"><span class="k">🗑️ บิล Void</span><span class="v">' + num(r.Void_Count) + ' บิล · ' + money(r.Void_Total) + ' ฿</span></div>' : '') +
-    (num(r.Cash_Over) ? '<div class="kv"><span class="k">💵 เงินสดเกิน/ขาด</span><span class="v">' + money(r.Cash_Over) + ' ฿</span></div>' : '') +
-    (n.drawer ? '<div class="kv"><span class="k">🗄️ ลิ้นชักเงินสด</span><span class="v">คาด ' + n.drawer[1] + ' → นับ ' + n.drawer[2] +
+    (n.bills ? '<div class="kv"><span class="k">👥 ลูกค้า / บิล</span><span class="v">' + n.guests + ' คน · ' + n.bills + ' บิล' + (cm ? '' : ' · เฉลี่ย ' + money0(num(r.Total_Sales) / n.bills) + ' ฿') + '</span></div>' : '') +
+    '<div class="kv"><span class="k">🏷️ ส่วนลด</span><span class="v">' + num(r.Discount_Count) + ' ครั้ง' + (cm ? '' : ' · ' + money(r.Discount_Total) + ' ฿') + '</span></div>' +
+    (num(r.Void_Count) ? '<div class="kv"><span class="k">🗑️ บิล Void</span><span class="v">' + num(r.Void_Count) + ' บิล' + (cm ? '' : ' · ' + money(r.Void_Total) + ' ฿') + '</span></div>' : '') +
+    (!cm && num(r.Cash_Over) ? '<div class="kv"><span class="k">💵 เงินสดเกิน/ขาด</span><span class="v">' + money(r.Cash_Over) + ' ฿</span></div>' : '') +
+    (!cm && n.drawer ? '<div class="kv"><span class="k">🗄️ ลิ้นชักเงินสด</span><span class="v">คาด ' + n.drawer[1] + ' → นับ ' + n.drawer[2] +
       ' <span class="' + (n.drawer[3].charAt(0) === '+' ? 'green' : 'red') + '">(' + esc(n.drawer[3]) + ')</span></span></div>' : '') +
-    (r.Commission_Total != null ? '<div class="kv"><span class="k">💸 ค่าคอมวันนี้</span><span class="v">' + money(r.Commission_Total) + ' ฿</span></div>' : '') +
+    (!cm && r.Commission_Total != null ? '<div class="kv"><span class="k">💸 ค่าคอมวันนี้</span><span class="v">' + money(r.Commission_Total) + ' ฿</span></div>' : '') +
     (r.Staff_On_Shift ? '<div class="kv"><span class="k">👥 คนเข้ากะ</span><span class="v">' + esc(nickList(r.Staff_On_Shift)) + '</span></div>' : '') +
     (n.rest ? '<div class="kv"><span class="k muted small">📝 ' + esc(n.rest) + '</span></div>' : '') +
     '<div class="muted small" style="margin-top:6px">' + (r.Submitted_By === AUTO_SUBMITTER ? '📩 ยอดจากอีเมล POS อัตโนมัติ' : '✍️ ปิดยอดโดย ' + esc(nickOf(r.Submitted_By))) + '</div>';
@@ -999,10 +1028,10 @@ async function renderMiniChart() {
   const dates = []; for (let i = 6; i >= 0; i--) dates.push(addDaysISO(today, -i));
   const byDate = {};
   for (const m of [...new Set(dates.map(x => x.slice(0, 7)))]) (await monthDays(m)).forEach(r => { byDate[String(r.Date).slice(0, 10)] = r; });
-  const vals = dates.map(x => byDate[x] ? num(byDate[x].Total_Sales) : 0);
+  const vals = dates.map(x => byDate[x] ? dayVal(byDate[x]) : 0);
   const max = Math.max(1, ...vals);
   const sum = vals.reduce((a, b) => a + b, 0);
-  $('miniTag').textContent = 'รวม ' + money0(sum) + ' ฿';
+  $('miniTag').textContent = 'รวม ' + fmtVal(sum);
   $('miniChart').innerHTML = dates.map((x, i) => {
     const h = vals[i] ? Math.max(6, Math.round(vals[i] / max * 70)) : 4;
     return '<div class="mb' + (x === today ? ' today' : '') + (vals[i] ? '' : ' none') + '" onclick="' + (byDate[x] ? 'openDay(\'' + x + '\')' : '') + '">' +
@@ -1026,8 +1055,8 @@ function openDayRecord(r) {
   const iso = String(r.Date).slice(0, 10);
   $('dayTitle').textContent = thDayName(iso) + ' ' + thaiDate(iso);
   $('dayBody').innerHTML =
-    '<div style="text-align:center;padding:4px 0 10px"><div class="muted small">ยอดขาย</div>' +
-    '<div style="font-size:40px;font-weight:700;color:var(--brown);line-height:1.1">' + money(r.Total_Sales) + '</div><div class="muted small">บาท</div></div>' +
+    '<div style="text-align:center;padding:4px 0 10px"><div class="muted small">' + (cupsMode() ? 'เครื่องดื่มที่ทำได้' : 'ยอดขาย') + '</div>' +
+    '<div style="font-size:40px;font-weight:700;color:var(--brown);line-height:1.1">' + (cupsMode() ? num(r.Commission_Cups) : money(r.Total_Sales)) + '</div><div class="muted small">' + unitLbl() + '</div></div>' +
     '<div class="card">' + dayBodyHTML(r, false) + '</div>';
   openSheet('shDay');
 }
@@ -1055,24 +1084,37 @@ async function loadReport() {
   const t = days._totals;
   if (!t) { body.innerHTML = '<div class="card">' + emptyHTML('😵', 'โหลดรายงานไม่สำเร็จ') + '</div>'; return; }
   if (!t.days) { body.innerHTML = '<div class="card">' + emptyHTML('🗓️', 'เดือนนี้ยังไม่มียอดขาย') + '</div>'; return; }
+  const cm = cupsMode();
 
   // ── insights ──
   const M = monthMatrix(repMonth, days);
   const cups = days.reduce((s, r) => s + num(r.Commission_Cups), 0);
+  const discCount = days.reduce((s, r) => s + num(r.Discount_Count), 0);
   let guests = 0, bills = 0, wdSum = 0, wdN = 0, weSum = 0, weN = 0, best = null;
+  const chCount = { cash: 0, transfer: 0, tct: 0 }; let chDays = 0;
   days.forEach(r => {
     const n = parseNote(r); guests += n.guests; bills += n.bills;
-    const iso = String(r.Date).slice(0, 10), d = dow(iso), v = num(r.Total_Sales);
+    if (n.ch) { chDays++; chCount.cash += n.ch.cash; chCount.transfer += n.ch.transfer; chCount.tct += n.ch.tct; }
+    const iso = String(r.Date).slice(0, 10), d = dow(iso), v = dayVal(r);
     if (d === 0 || d === 6) { weSum += v; weN++; } else { wdSum += v; wdN++; }
-    if (!best || v > num(best.Total_Sales)) best = r;
+    if (!best || v > dayVal(best)) best = r;
   });
-  const pay = [
-    { l: 'เงินสด', a: t.cash, c: 'var(--green)' }, { l: 'ไทยช่วยไทย', a: t.tct, c: 'var(--blue)' }, { l: 'เงินโอน', a: t.transfer, c: 'var(--pink)' }];
-  const paySum = pay.reduce((s, c) => s + c.a, 0) || 1;
+  const pay = cm
+    ? [{ l: 'เงินสด', a: chCount.cash, c: 'var(--green)' }, { l: 'ไทยช่วยไทย', a: chCount.tct, c: 'var(--blue)' }, { l: 'เงินโอน', a: chCount.transfer, c: 'var(--pink)' }]
+    : [{ l: 'เงินสด', a: t.cash, c: 'var(--green)' }, { l: 'ไทยช่วยไทย', a: t.tct, c: 'var(--blue)' }, { l: 'เงินโอน', a: t.transfer, c: 'var(--pink)' }];
 
-  let html =
-    '<div class="rep-grid">' +
-    '<div class="tiles rep" style="grid-area:tiles">' +
+  let html = '<div class="rep-grid"><div class="tiles rep" style="grid-area:tiles">';
+  if (cm) {
+    html +=
+    '<div class="tile gold" style="grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px">' +
+    '<div><div class="k" style="margin:0 0 2px">เครื่องดื่มทั้งเดือน</div><div class="v" style="font-size:32px">' + cups + '<small>แก้ว</small></div></div>' +
+    '<div style="text-align:right"><div class="v" style="font-size:20px">' + t.days + '<small>วัน</small></div><div class="k" style="margin:0">เฉลี่ย ' + Math.round(cups / t.days) + ' แก้ว/วัน</div></div></div>' +
+    '<div class="tile"><div class="ic">👥</div><div class="v">' + (bills || '–') + '<small>บิล</small></div><div class="k">' + (guests ? guests + ' คน' : 'ลูกค้า') + (bills ? ' · เฉลี่ย ' + (cups / bills).toFixed(1) + ' แก้ว/บิล' : '') + '</div></div>' +
+    '<div class="tile"><div class="ic">🏷️</div><div class="v">' + discCount + '<small>ครั้ง</small></div><div class="k">ใช้ส่วนลด</div></div>' +
+    '<div class="tile"><div class="ic">🏆</div><div class="v">' + (best ? num(best.Commission_Cups) : '–') + '<small>แก้ว</small></div><div class="k">วันขายดีสุด ' + (best ? thaiDateShort(best.Date) : '') + '</div></div>' +
+    '<div class="tile"><div class="ic">🗑️</div><div class="v">' + days.reduce((s, r) => s + num(r.Void_Count), 0) + '<small>บิล</small></div><div class="k">บิล Void</div></div>' +
+    '</div>';
+  } else html +=
     '<div class="tile gold" style="grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px">' +
     '<div><div class="k" style="margin:0 0 2px">ยอดขายทั้งเดือน</div><div class="v" style="font-size:32px">' + money(t.sales) + '<small>บาท</small></div></div>' +
     '<div style="text-align:right"><div class="v" style="font-size:20px">' + t.days + '<small>วัน</small></div><div class="k" style="margin:0">เฉลี่ย ' + money0(t.sales / t.days) + ' ฿/วัน</div></div></div>' +
@@ -1084,20 +1126,19 @@ async function loadReport() {
       : '<div class="tile"><div class="ic">🏆</div><div class="v">' + (best ? money0(best.Total_Sales) : '–') + '<small>฿</small></div><div class="k">วันขายดีสุด ' + (best ? thaiDateShort(best.Date) : '') + '</div></div>') +
     '</div>';
 
-  // ช่องทางเงิน
-  html += '<div class="card" style="margin-top:14px;grid-area:channels"><div class="sec-h" style="margin:0"><h2 style="font-size:14.5px">💳 ช่องทางรับเงิน</h2></div>' +
-    '<div class="stack">' + pay.map(c => '<i style="width:' + Math.max(1, c.a / paySum * 100) + '%;background:' + c.c + '"></i>').join('') + '</div>' +
-    '<div class="legend">' + pay.map(c => '<div><span class="dot" style="background:' + c.c + '"></span>' + c.l + '<b>' + money0(c.a) + ' ฿ <small class="muted" style="font-weight:400">' + pct(c.a, paySum) + '%</small></b></div>').join('') + '</div></div>';
+  // ช่องทางเงิน (โหมดพนักงาน = จำนวนครั้ง เฉพาะวันที่มีข้อมูล)
+  if (!cm || chDays) html += '<div class="card" style="margin-top:14px;grid-area:channels"><div class="sec-h" style="margin:0"><h2 style="font-size:14.5px">💳 ช่องทางรับเงิน</h2>' +
+    (cm ? '<span class="tag">' + (chCount.cash + chCount.transfer + chCount.tct) + ' ครั้ง · ' + chDays + ' วัน</span>' : '') + '</div>' + channelsHTML(pay, cm ? 'ครั้ง' : '฿') + '</div>';
 
   // กราฟรายวัน
-  html += '<div class="card" style="grid-area:chart"><div class="sec-h" style="margin:0 0 6px"><h2 style="font-size:14.5px">📈 ยอดขายรายวัน</h2><span class="tag">แตะแท่งดูรายวัน</span></div>' +
-    '<div class="chart-wrap" id="monthChart"></div>' +
+  html += '<div class="card" style="grid-area:chart"><div class="sec-h" style="margin:0 0 6px"><h2 style="font-size:14.5px">📈 ' + (cm ? 'เครื่องดื่มรายวัน' : 'ยอดขายรายวัน') + '</h2><span class="tag">แตะแท่งดูรายวัน</span></div>' +
+    '<div class="chart-wrap" id="monthChart"></div>' + (cm ? '<div class="muted" style="font-size:11px;text-align:right">หน่วย: แก้ว</div>' : '') +
     '<div class="chart-legend"><span><i style="background:var(--caramel)"></i>จันทร์–ศุกร์</span><span><i style="background:var(--pink)"></i>เสาร์–อาทิตย์</span><span><i style="background:var(--blue);height:2px;vertical-align:3px"></i>ค่าเฉลี่ย</span></div>' +
     '<div id="chartDetail" style="margin-top:8px"></div>' +
     '<div class="divider"></div><div class="tiles c3" style="gap:8px">' +
     '<div style="text-align:center"><div class="b brown" style="font-size:16px">' + (wdN ? money0(wdSum / wdN) : '–') + '</div><div class="muted" style="font-size:11px">เฉลี่ยวันธรรมดา</div></div>' +
     '<div style="text-align:center"><div class="b pink" style="font-size:16px">' + (weN ? money0(weSum / weN) : '–') + '</div><div class="muted" style="font-size:11px">เฉลี่ยเสาร์-อาทิตย์</div></div>' +
-    '<div style="text-align:center"><div class="b brown" style="font-size:16px">' + (best ? money0(best.Total_Sales) : '–') + '</div><div class="muted" style="font-size:11px">สูงสุด ' + (best ? thaiDateShort(best.Date) : '') + '</div></div>' +
+    '<div style="text-align:center"><div class="b brown" style="font-size:16px">' + (best ? money0(dayVal(best)) : '–') + '</div><div class="muted" style="font-size:11px">สูงสุด ' + (best ? thaiDateShort(best.Date) : '') + '</div></div>' +
     '</div></div>';
 
   // ปฏิทินสัปดาห์
@@ -1120,7 +1161,7 @@ function monthMatrix(month, days) {
   const byDate = {}; (days || []).forEach(r => { byDate[String(r.Date).slice(0, 10)] = r; });
   const list = []; let max = 0, sum = 0, count = 0;
   for (let i = 1; i <= nDays; i++) {
-    const iso = month + '-' + pad2(i); const r = byDate[iso] || null; const v = r ? num(r.Total_Sales) : 0;
+    const iso = month + '-' + pad2(i); const r = byDate[iso] || null; const v = r ? dayVal(r) : 0;
     list.push({ iso, r, v }); if (r) { max = Math.max(max, v); sum += v; count++; }
   }
   return { list, max, sum, count, avg: count ? sum / count : 0 };
@@ -1162,9 +1203,10 @@ function chartPick(i) {
     .map(x => (x.c.Emoji ? x.c.Emoji + ' ' : '') + esc(x.c.Name) + ' ' + x.n);
   $('chartDetail').innerHTML =
     '<div class="row" style="border:none;padding:6px 0 0"><div class="main"><div class="t">' + thDayName(iso) + ' ' + thaiDate(iso) + '</div>' +
-    '<div class="s">🥤 ' + num(r.Commission_Cups) + ' แก้ว' + (n.bills ? ' · 🧾 ' + n.bills + ' บิล' : '') + (num(r.Discount_Total) ? ' · 🏷️ ลด ' + money0(r.Discount_Total) + ' ฿' : '') + '</div>' +
+    '<div class="s">🥤 ' + num(r.Commission_Cups) + ' แก้ว' + (n.bills ? ' · 🧾 ' + n.bills + ' บิล' : '') +
+    (cupsMode() ? (num(r.Discount_Count) ? ' · 🏷️ ลด ' + num(r.Discount_Count) + ' ครั้ง' : '') : (num(r.Discount_Total) ? ' · 🏷️ ลด ' + money0(r.Discount_Total) + ' ฿' : '')) + '</div>' +
     (cats.length ? '<div class="s" style="margin-top:2px">' + cats.join(' · ') + '</div>' : '') + '</div>' +
-    '<div style="text-align:right"><div class="v" style="font-size:18px">' + money(r.Total_Sales) + ' ฿</div>' +
+    '<div style="text-align:right"><div class="v" style="font-size:18px">' + (cupsMode() ? fmtVal(r.Commission_Cups) : money(r.Total_Sales) + ' ฿') + '</div>' +
     '<button class="btn sm ghost" style="margin-top:4px" onclick="openDay(\'' + iso + '\')">ดูเต็ม ›</button></div></div>';
 }
 
@@ -1184,19 +1226,19 @@ async function renderWeek() {
   for (const m of [...new Set(dates.map(x => x.slice(0, 7)))]) (await monthDays(m)).forEach(r => { byDate[String(r.Date).slice(0, 10)] = r; });
   const today = todayISO();
   weekRecords = dates.map(x => byDate[x] || null);
-  const max = Math.max(1, ...weekRecords.map(r => r ? num(r.Total_Sales) : 0));
+  const max = Math.max(1, ...weekRecords.map(r => r ? dayVal(r) : 0));
   let sum = 0, cups = 0;
   const el = $('weekLabel'); if (!el) return;
   el.textContent = thaiDate(dates[0]) + ' – ' + thaiDate(dates[6]);
   $('weekDays').innerHTML = dates.map((x, i) => {
-    const r = weekRecords[i]; const v = r ? num(r.Total_Sales) : 0; sum += v; if (r) cups += num(r.Commission_Cups);
+    const r = weekRecords[i]; const v = r ? dayVal(r) : 0; sum += v; if (r) cups += num(r.Commission_Cups);
     const wk = dow(x) === 0 || dow(x) === 6;
     return '<div class="week-row' + (wk ? ' wk' : '') + (x === today ? ' today' : '') + '"' + (r ? ' onclick="openWeekDay(' + i + ')"' : '') + '>' +
       '<div class="d">' + TH_DAYS[dow(x)] + '<small>' + thaiDateShort(x) + (x === today ? ' · วันนี้' : '') + '</small></div>' +
       '<div class="track"><div class="fill" style="width:' + (v ? Math.max(3, v / max * 100) : 0) + '%"></div></div>' +
-      (r ? '<div class="v">' + money0(v) + ' ฿</div>' : '<div class="v none">' + (x > today ? '' : '—') + '</div>') + '</div>';
+      (r ? '<div class="v">' + fmtVal(v) + '</div>' : '<div class="v none">' + (x > today ? '' : '—') + '</div>') + '</div>';
   }).join('') +
-    '<div class="kv" style="margin-top:8px;padding-top:10px;border-top:1px solid var(--line)"><span class="k">รวมทั้งสัปดาห์</span><span class="v">' + money(sum) + ' ฿ · ' + cups + ' แก้ว</span></div>';
+    '<div class="kv" style="margin-top:8px;padding-top:10px;border-top:1px solid var(--line)"><span class="k">รวมทั้งสัปดาห์</span><span class="v">' + (cupsMode() ? cups + ' แก้ว' : money(sum) + ' ฿ · ' + cups + ' แก้ว') + '</span></div>';
 }
 function openWeekDay(i) { if (weekRecords[i]) openDayRecord(weekRecords[i]); }
 
@@ -1568,6 +1610,8 @@ function openSettings() {
   $('setProfile').innerHTML = '<div style="display:flex;align-items:center;gap:12px"><div class="avatar" style="width:48px;height:48px;font-size:20px">' + initial(me.Nickname || me.Name) + '</div>' +
     '<div><div class="b" style="font-size:16px">' + esc(me.Name) + (me.Nickname ? ' <span class="muted" style="font-weight:400">(' + esc(me.Nickname) + ')</span>' : '') + '</div>' +
     '<div class="muted small">' + (ROLE_TH[me.Role] || esc(me.Role)) + ' · ' + esc(config.shopName) + '</div></div></div>';
+  $('setPreview').classList.toggle('hidden', !isMgr());
+  $('btnPreview').textContent = previewStaff ? '🔙 กลับมาดูแบบผู้บริหาร' : '👀 ดูแบบพนักงาน (ซ่อนตัวเงินทั้งหมด)';
   if (!$('resendDate').value) $('resendDate').value = todayISO();
   $('sysInfo').innerHTML =
     '☕ ร้าน: ' + esc(config.shopName) + '<br>' +
@@ -1576,6 +1620,14 @@ function openSettings() {
     (config.lineGroupConfigured ? '✅ ส่งการ์ดเข้ากลุ่ม LINE ได้' : '⚠️ ยังไม่ได้ตั้งค่า LINE token/กลุ่ม') + '<br>' +
     '📊 ข้อมูลทั้งหมดอยู่ใน Google Sheets ของร้าน';
   openSheet('shSettings');
+}
+function togglePreview() {
+  previewStaff = !previewStaff;
+  closeSheet('shSettings');
+  $('tbRole').textContent = (ROLE_TH[me.Role] || me.Role) + ' · ' + config.shopName + (previewStaff ? ' · 👀 ดูแบบพนักงาน' : '');
+  showToast(previewStaff ? '👀 กำลังดูแบบพนักงาน (ซ่อนตัวเงิน)' : 'กลับมาดูแบบผู้บริหารแล้ว');
+  const comBtn = document.querySelector('#bottomNav button[data-tab=com]'); if (comBtn) comBtn.classList.toggle('hidden', previewStaff);
+  showTab(currentTab === 'com' ? 'home' : currentTab);
 }
 async function importFromGmail(btn) {
   btn.disabled = true; btn.textContent = 'กำลังดึง...';

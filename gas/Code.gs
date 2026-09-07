@@ -532,10 +532,16 @@ function actionGetDailyClose(req) {
 
 // ตัดตัวเลขเงินค่าคอมออกจากข้อมูลที่ส่งให้พนักงานระดับต่ำกว่า manager
 // (จำนวนแก้ว Commission_Cups ไม่ลับ — ใช้โชว์ "เครื่องดื่มรวม" ทั้งในแอปและการ์ดกลุ่ม)
+// ตัวเงินทุกอย่าง (ยอดขาย/ช่องทาง/ส่วนลดบาท/ลิ้นชัก/ค่าคอมบาท) เป็นเรื่องหลังบ้าน
+// บาริสต้าเห็นได้แค่ "จำนวน" — แก้ว / บิล / ครั้ง / รายการ
+var MONEY_FIELDS = ['Commission_Total', 'Commission_Rate', 'Total_Sales', 'Cash', 'Thai_Chuay_Thai',
+  'Transfer', 'Cash_Over', 'Channel_Diff', 'Discount_Total', 'Void_Total'];
 function stripCommission(rec, staff) {
   if (ROLE_LEVEL[staff.Role] >= ROLE_LEVEL.manager) return rec;
-  delete rec.Commission_Total;
-  delete rec.Commission_Rate;
+  MONEY_FIELDS.forEach(function (k) { delete rec[k]; });
+  rec.Note = String(rec.Note || '')
+    .replace(/\s*\|?\s*ลิ้นชัก:[^|]*/, '')
+    .replace(/\s*\|?\s*รวมบัตรเครดิต[^|]*/, '');
   return rec;
 }
 
@@ -555,15 +561,18 @@ function actionGetReport(req) {
   });
 
   var canSeeMoney = ROLE_LEVEL[staff.Role] >= ROLE_LEVEL.manager;
-  var totals = { sales: 0, cash: 0, tct: 0, transfer: 0, discount: 0, days: days.length };
-  if (canSeeMoney) totals.commission = 0;
+  var totals = { days: days.length, cups: 0, discountCount: 0 };
+  if (canSeeMoney) { totals.sales = 0; totals.cash = 0; totals.tct = 0; totals.transfer = 0; totals.discount = 0; totals.commission = 0; }
   days.forEach(function (d) {
+    totals.cups += num(d.Commission_Cups);
+    totals.discountCount += num(d.Discount_Count);
+    if (!canSeeMoney) return;   // บาริสต้า: ไม่ส่งยอดเงินรวมด้วย
     totals.sales += num(d.Total_Sales);
     totals.cash += num(d.Cash);
     totals.tct += num(d.Thai_Chuay_Thai);
     totals.transfer += num(d.Transfer);
     totals.discount += num(d.Discount_Total);
-    if (canSeeMoney) totals.commission += num(d.Commission_Total);
+    totals.commission += num(d.Commission_Total);
   });
 
   // ค่าคอมรายคน: บาริสต้าเห็นแค่ของตัวเอง / manager+ เห็นทุกคน
@@ -1468,6 +1477,11 @@ function parseDrawerReport(text) {
     creditCard: lastNum(findLine('By Credit Card')),
     thaiQR: lastNum(findLine('By Thai QR')),
     thaiChuayThai: lastNum(tctLine),
+    // จำนวน "ครั้ง" ต่อช่องทาง (ตัวเลขกลางบรรทัด เช่น "| By Cash | 11 | 985.25 |") — ไว้โชว์ให้พนักงานแทนยอดบาท
+    cashCount: lastTwoNums(findLine('By Cash'))[0],
+    creditCount: lastTwoNums(findLine('By Credit Card'))[0],
+    qrCount: lastTwoNums(findLine('By Thai QR'))[0],
+    tctCount: lastTwoNums(tctLine)[0],
     discountCount: Math.abs(discount[0]),
     discountTotal: Math.abs(discount[1]),
     voidCount: voidAll[0],
@@ -1541,6 +1555,9 @@ function saveImportedClose(parsed) {
   var transfer = parsed.thaiQR + parsed.creditCard;
   if (parsed.creditCard > 0) noteExtra.push('รวมบัตรเครดิต ' + fmtMoney(parsed.creditCard) + ' ในเงินโอน');
   noteExtra.push('ลูกค้า ' + parsed.guests + ' คน / ' + parsed.bills + ' บิล');
+  // จำนวนครั้งต่อช่องทาง — หน้าแอปโหมดพนักงานอ่านจาก Note (ไม่เพิ่มคอลัมน์ กันชีตเก่าพัง)
+  noteExtra.push('ช่องทาง: เงินสด ' + num(parsed.cashCount) + ' / โอน ' + (num(parsed.qrCount) + num(parsed.creditCount)) +
+    ' / ไทยช่วยไทย ' + num(parsed.tctCount) + ' ครั้ง');
   if (parsed.drawerDiff !== 0) {
     noteExtra.push('ลิ้นชัก: คาด ' + fmtMoney(parsed.drawerExpected) + ' จริง ' +
       fmtMoney(parsed.drawerActual) + ' (' + (parsed.drawerDiff > 0 ? '+' : '') + fmtMoney(parsed.drawerDiff) + ')');
