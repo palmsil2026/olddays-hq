@@ -421,6 +421,7 @@
     <div class="wrap">
       <div class="home-grid">
       <div class="col">
+      <div id="stockCheckBanner"></div>
       <div class="hero" id="dayHero"><div class="sk" style="height:150px;background:rgba(255,247,234,.12)"></div></div>
       <div id="dayDetail"></div>
       </div>
@@ -467,6 +468,7 @@
       <div class="page-sub">แตะรายการเพื่อรับเข้า · ตัดออก · นับสต๊อก</div>
       <div class="stock-grid">
       <div class="col">
+      <div id="stockCheckCard" style="margin-top:12px;"></div>
       <div class="tiles c3" style="margin:12px 0;" id="stockTiles"></div>
       <div class="seg" id="stockSeg" style="margin-bottom:12px;">
         <button class="on" onclick="setStockFilter('all',this)">ทั้งหมด</button>
@@ -894,6 +896,8 @@ async function loadHome() {
   // สต๊อกใกล้หมด
   api({ action: 'getStock' }).then(d => {
     stockCache = d.ingredients || [];
+    stockCheckToday = d.todayCheck || null;
+    renderStockCheckBanner();
     const low = stockCache.filter(i => num(i.Current_Stock) <= num(i.Min_Stock));
     $('alertLow').classList.toggle('hidden', !low.length);
     $('alertLowList').innerHTML = low.map(i =>
@@ -1284,19 +1288,48 @@ const ING_EMOJI = [
 function ingredientEmoji(name) { const s = String(name || ''); for (const [kw, emo] of ING_EMOJI) if (s.includes(kw)) return emo; return '📦'; }
 let stockFilter = 'all';
 let stockMovesCache = [];
+let stockCheckToday = null;   // {by, at} ถ้าวันนี้มีคนกดเช็คสต๊อกแล้ว
 
 async function loadStock() {
   try {
     const d = await api({ action: 'getStock' });
     stockCache = d.ingredients || [];
     stockMovesCache = d.recentMoves || [];
+    stockCheckToday = d.todayCheck || null;
     renderStock();
   } catch (e) { $('stockGrid').innerHTML = '<div class="card">' + emptyHTML('😵', 'โหลดไม่สำเร็จ: ' + esc(e.message)) + '</div>'; }
+}
+function checkTime(ts) { const d = new Date(ts); return isNaN(d) ? '' : pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+function renderStockCheckBanner() {
+  const el = $('stockCheckBanner'); if (!el) return;
+  el.innerHTML = stockCheckToday
+    ? '<div class="card tight" style="margin-bottom:12px;border-color:#BFD5BC;background:#F3F8F1;display:flex;align-items:center;gap:10px"><span style="font-size:22px">✅</span>' +
+      '<div class="small" style="color:var(--green);font-weight:500">เช็คสต๊อกวันนี้แล้ว · ' + esc(nickOf(stockCheckToday.by)) + ' ' + checkTime(stockCheckToday.at) + '</div></div>'
+    : '<div class="card tight" style="margin-bottom:12px;border-color:#E8CF98;background:#FFFBF2;display:flex;align-items:center;gap:10px;cursor:pointer" onclick="showTab(\'stock\')"><span style="font-size:22px">📦</span>' +
+      '<div style="flex:1"><div class="b" style="font-size:14.5px;color:#7A5417">วันนี้ยังไม่ได้เช็คสต๊อก</div><div class="muted small">ดูของในร้านแล้วกดยืนยันในแท็บสต๊อก</div></div><span class="brown b">›</span></div>';
+}
+function renderStockCheckCard() {
+  $('stockCheckCard').innerHTML = stockCheckToday
+    ? '<div class="card tight" style="border-color:#BFD5BC;background:#F3F8F1;display:flex;align-items:center;gap:10px;margin-bottom:0"><span style="font-size:24px">✅</span>' +
+      '<div><div class="b" style="color:var(--green)">เช็คสต๊อกวันนี้แล้ว</div><div class="muted small">โดย ' + esc(nickOf(stockCheckToday.by)) + ' เวลา ' + checkTime(stockCheckToday.at) + ' · ขอบคุณค่ะ 🙏</div></div></div>'
+    : '<div class="card" style="border-color:#E8CF98;background:#FFFBF2;margin-bottom:0"><div class="b" style="font-size:15px;color:#7A5417">📦 เช็คสต๊อกประจำวัน</div>' +
+      '<div class="muted small" style="margin:2px 0 4px;line-height:1.5">ไล่ดูของในร้านเทียบกับรายการด้านล่าง ถ้าอะไรใกล้หมดแจ้งในกลุ่มได้เลย เสร็จแล้วกดปุ่มนี้ (วันละครั้ง ใครกดก็ได้)</div>' +
+      '<button class="btn green" style="margin-top:8px" onclick="markStockChecked(this)">✅ เช็คสต๊อกวันนี้แล้ว</button></div>';
+}
+async function markStockChecked(btn) {
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+  try {
+    const d = await api({ action: 'markStockChecked' });
+    stockCheckToday = { by: d.by, at: d.at };
+    showToast(d.already ? 'วันนี้มีคนเช็คไปแล้ว ✓' : 'บันทึกแล้ว ขอบคุณค่ะ ✅', 3000);
+    renderStockCheckCard(); renderStockCheckBanner();
+  } catch (e) { showToast(e.message, 4000); btn.disabled = false; btn.textContent = '✅ เช็คสต๊อกวันนี้แล้ว'; }
 }
 function setStockFilter(f, btn) {
   stockFilter = f; document.querySelectorAll('#stockSeg button').forEach(b => b.classList.toggle('on', b === btn)); renderStock();
 }
 function renderStock() {
+  renderStockCheckCard();
   const low = stockCache.filter(i => num(i.Current_Stock) <= num(i.Min_Stock));
   $('stockTiles').innerHTML =
     '<div class="tile"><div class="v">' + stockCache.length + '</div><div class="k">รายการทั้งหมด</div></div>' +

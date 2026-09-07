@@ -28,6 +28,7 @@ var SHEET_TABS = {
   IMPORT_LOG: 'ImportLog',
   STAFF_PAY: 'StaffPay',
   COM_PAY: 'CommissionPay',
+  STOCK_CHECKS: 'StockChecks',
 };
 
 // ชื่อผู้ส่งของ record ที่ดึงจากอีเมล POS อัตโนมัติ — แอปใช้แยกว่ายังรอคนยืนยัน
@@ -56,6 +57,7 @@ var HEADERS = {
   ImportLog: ['Message_ID', 'Date', 'Imported_At', 'Status'],
   StaffPay: ['Staff_Name', 'PromptPay', 'Note'],
   CommissionPay: ['Date', 'Staff_Name', 'Amount', 'Status', 'Paid_At', 'Paid_By', 'Note'],
+  StockChecks: ['Date', 'Checked_By', 'Checked_At', 'Note'],
 };
 
 var SEED_CATEGORIES = [
@@ -117,7 +119,7 @@ var WRITE_ACTIONS = {
   registerStaff: 1, submitDailyClose: 1, stockMove: 1, addIngredient: 1,
   deleteStockMove: 1, createPurchase: 1, updatePurchase: 1, saveMenuItem: 1,
   importFromGmail: 1, assignCommission: 1, payCommission: 1, payAllCommission: 1, saveStaffPay: 1,
-  unpayCommission: 1, disableIngredient: 1, setCategoryCommission: 1,
+  unpayCommission: 1, disableIngredient: 1, setCategoryCommission: 1, markStockChecked: 1,
 };
 
 function handleRequest(e) {
@@ -183,6 +185,7 @@ function route(action, req) {
     case 'addIngredient':    return actionAddIngredient(req);
     case 'stockMove':        return actionStockMove(req);
     case 'deleteStockMove':  return actionDeleteStockMove(req);
+    case 'markStockChecked': return actionMarkStockChecked(req);
 
     // ── เบิกซื้อ ──
     case 'getPurchases':     return actionGetPurchases(req);
@@ -627,7 +630,25 @@ function actionGetStock(req) {
   return {
     ingredients: ingredients,
     recentMoves: recent,
+    todayCheck: todayStockCheck(),
   };
+}
+
+// ── เช็คสต๊อกประจำวัน: พนักงานกด "เช็คสต๊อกแล้ว" วันละครั้ง — ไม่กด = บอทเตือนในกลุ่มตอนเย็น ──
+function todayStockCheck() {
+  var today = dateKey(new Date());
+  var rows = readRows(SHEET_TABS.STOCK_CHECKS).filter(function (r) { return dateKey(r.Date) === today; });
+  if (!rows.length) return null;
+  var r = rows[rows.length - 1];
+  return { by: r.Checked_By, at: r.Checked_At };
+}
+function actionMarkStockChecked(req) {
+  var staff = requireStaff(req);
+  var existing = todayStockCheck();
+  if (existing) return { already: true, by: existing.by, at: existing.at };
+  var now = new Date();
+  appendRowObj(SHEET_TABS.STOCK_CHECKS, { Date: dateKey(now), Checked_By: staff.Name, Checked_At: now, Note: String(req.note || '') });
+  return { already: false, by: staff.Name, at: now };
 }
 
 // ลบ/undo รายการเคลื่อนไหวสต๊อกที่เพิ่งกดผิด — ลบได้เฉพาะรายการ "ล่าสุด" ของวัตถุดิบนั้นๆ เท่านั้น
@@ -1686,14 +1707,10 @@ function saveImportedClose(parsed) {
 function buildOpsAlertText() {
   var lines = [];
 
-  var low = readRows(SHEET_TABS.INGREDIENTS).filter(function (i) {
-    return isTrue(i.Active) && num(i.Current_Stock) <= num(i.Min_Stock);
-  });
-  if (low.length) {
-    lines.push('⚠️ วัตถุดิบใกล้หมด:');
-    low.forEach(function (i) {
-      lines.push('• ' + i.Name + ' — เหลือ ' + num(i.Current_Stock) + ' ' + i.Unit);
-    });
+  // ไม่ลิสต์ของใกล้หมดในกลุ่มแล้ว (ถ้าใกล้หมดพนักงานแจ้งกันเอง) — เตือนแค่ "วันนี้ยังไม่มีใครกดเช็คสต๊อก"
+  if (!todayStockCheck()) {
+    lines.push('อย่าลืมเช็คสต๊อกนะคะ 🙏');
+    lines.push('(เปิดแอป → 📦 สต๊อก → ดูของแล้วกด ✅ เช็คสต๊อกแล้ว)');
   }
 
   var open = readRows(SHEET_TABS.PURCHASES).filter(function (p) {
