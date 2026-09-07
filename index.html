@@ -598,6 +598,11 @@
       <p class="muted small" style="margin:4px 0 2px;line-height:1.5;">พนักงานเห็นทุกอย่างเป็นแก้ว / บิล / ครั้ง ไม่มีตัวเลขบาท — กดเพื่อดูว่าพนักงานเห็นอะไร</p>
       <button class="btn ghost" id="btnPreview" onclick="togglePreview()">👀 ดูแบบพนักงาน</button>
     </div>
+    <div class="card" id="setCats">
+      <div class="b brown">🧾 หมวดสินค้า · นับค่าคอมไหม</div>
+      <p class="muted small" style="margin:4px 0 8px;line-height:1.5;">หมวดใหม่ที่ POS ส่งมา ระบบตั้ง "ไม่นับ" ไว้ก่อน — แตะเพื่อสลับ ระบบจะคำนวณแก้วค่าคอมย้อนหลังให้ทุกวันอัตโนมัติ</p>
+      <div id="setCatsList"></div>
+    </div>
     <div class="card">
       <div class="b brown">📩 ดึงยอดจาก POS (Gmail)</div>
       <p class="muted small" style="margin:4px 0 2px;line-height:1.5;">ปกติระบบดึงเองทุก 15 นาทีช่วงเย็น — ปุ่มนี้ไว้กดดึงทันทีถ้ายอดยังไม่เข้า</p>
@@ -1611,6 +1616,8 @@ function openSettings() {
     '<div><div class="b" style="font-size:16px">' + esc(me.Name) + (me.Nickname ? ' <span class="muted" style="font-weight:400">(' + esc(me.Nickname) + ')</span>' : '') + '</div>' +
     '<div class="muted small">' + (ROLE_TH[me.Role] || esc(me.Role)) + ' · ' + esc(config.shopName) + '</div></div></div>';
   $('setPreview').classList.toggle('hidden', !isMgr());
+  $('setCats').classList.toggle('hidden', !isMgr());
+  if (isMgr()) renderCatSettings();
   $('btnPreview').textContent = previewStaff ? '🔙 กลับมาดูแบบผู้บริหาร' : '👀 ดูแบบพนักงาน (ซ่อนตัวเงินทั้งหมด)';
   if (!$('resendDate').value) $('resendDate').value = todayISO();
   $('sysInfo').innerHTML =
@@ -1620,6 +1627,25 @@ function openSettings() {
     (config.lineGroupConfigured ? '✅ ส่งการ์ดเข้ากลุ่ม LINE ได้' : '⚠️ ยังไม่ได้ตั้งค่า LINE token/กลุ่ม') + '<br>' +
     '📊 ข้อมูลทั้งหมดอยู่ใน Google Sheets ของร้าน';
   openSheet('shSettings');
+}
+function renderCatSettings() {
+  $('setCatsList').innerHTML = categories.map(c => {
+    const on = isComCat(c);
+    return '<div class="row"><div class="main"><div class="t">' + (c.Emoji || (on ? '🥤' : '📦')) + ' ' + esc(c.Name) + '</div><div class="s">หน่วย: ' + esc(c.Unit) + '</div></div>' +
+      '<button class="chip sm' + (on ? ' on' : '') + '" data-id="' + esc(c.Category_ID) + '" onclick="toggleCatCommission(this.dataset.id, this)">' + (on ? '✓ นับค่าคอม' : 'ไม่นับ') + '</button></div>';
+  }).join('') || '<div class="muted small">ยังไม่มีหมวดสินค้า</div>';
+}
+async function toggleCatCommission(id, btn) {
+  const c = categories.find(x => x.Category_ID === id); if (!c) return;
+  const next = !isComCat(c);
+  btn.disabled = true; btn.textContent = 'กำลังคำนวณ...';
+  try {
+    const d = await api({ action: 'setCategoryCommission', categoryId: id, count: next });
+    c.Count_Commission = next;
+    Object.keys(monthCache).forEach(k => delete monthCache[k]);
+    showToast((next ? '✓ นับค่าคอม ' : 'ไม่นับ ') + c.Name + ' แล้ว · คำนวณใหม่ ' + num(d.recalculated) + ' วัน', 4000);
+    renderCatSettings();
+  } catch (e) { showToast(e.message, 4000); renderCatSettings(); }
 }
 function togglePreview() {
   previewStaff = !previewStaff;

@@ -117,7 +117,7 @@ var WRITE_ACTIONS = {
   registerStaff: 1, submitDailyClose: 1, stockMove: 1, addIngredient: 1,
   deleteStockMove: 1, createPurchase: 1, updatePurchase: 1, saveMenuItem: 1,
   importFromGmail: 1, assignCommission: 1, payCommission: 1, payAllCommission: 1, saveStaffPay: 1,
-  unpayCommission: 1, disableIngredient: 1,
+  unpayCommission: 1, disableIngredient: 1, setCategoryCommission: 1,
 };
 
 function handleRequest(e) {
@@ -176,6 +176,7 @@ function route(action, req) {
     case 'saveStaffPay':       return actionSaveStaffPay(req);
     case 'saveShift':          return actionSaveShift(req);
     case 'disableIngredient':  return actionDisableIngredient(req);
+    case 'setCategoryCommission': return actionSetCategoryCommission(req);
 
     // ── สต๊อก ──
     case 'getStock':         return actionGetStock(req);
@@ -1163,6 +1164,78 @@ function actionGetCommissionAdmin(req) {
 
 /** 👥 บันทึกว่าใครเข้ากะวันไหน (หลังบ้าน manager+) — เก็บใน Staff_On_Shift ของ DailyClose
  *  ใช้จากหน้าจ่ายค่าคอม: แตะชิปชื่อ = บันทึกทันที เปลี่ยนกี่รอบก็ได้ (เขียนทับค่าเดิม) */
+/**
+ * เปิด/ปิด "นับค่าคอม" ของหมวดสินค้า (manager+) แล้วคำนวณแก้วค่าคอมย้อนหลังใหม่ทุกวัน
+ * — หมวดที่ POS ส่งมาใหม่ (เช่น PREMIUM, Secret Kub eiei) ระบบสร้างให้แบบ "ไม่นับ" ไว้ก่อน เจ้าของมาเปิดเองที่นี่
+ */
+function actionSetCategoryCommission(req) {
+  requireRole(req, 'manager');
+  var id = String(req.categoryId || '');
+  var rows = readRows(SHEET_TABS.CATEGORIES);
+  var cat = null;
+  for (var i = 0; i < rows.length; i++) if (rows[i].Category_ID === id) { cat = rows[i]; break; }
+  if (!cat) throw new Error('ไม่พบหมวดสินค้า');
+  cat.Count_Commission = isTrue(req.count);
+  var keep = cat._rowIndex;
+  delete cat._rowIndex;
+  updateRowObj(SHEET_TABS.CATEGORIES, keep, cat);
+  var result = recalcCommissionAll();
+  return { categoryId: id, count: cat.Count_Commission, recalculated: result.days, paysUpdated: result.pays };
+}
+
+/**
+ * คำนวณ Commission_Cups / Commission_Total ของทุกวันใน DailyClose ใหม่ตามธง Count_Commission ปัจจุบัน
+ * + ปรับยอดใน CommissionPay ที่ยัง unpaid ให้ตรง (ที่จ่ายไปแล้วไม่แตะ)
+ */
+function recalcCommissionAll() {
+  var cats = readRows(SHEET_TABS.CATEGORIES).filter(function (c) { return isTrue(c.Active); });
+  var defaultRate = num(getConfig().COMMISSION_PER_CUP || 3);
+  var totalByDate = {};
+  var changedDays = 0;
+  readRows(SHEET_TABS.DAILY).forEach(function (r) {
+    var counts = {};
+    try { counts = JSON.parse(r.Category_Counts_JSON || '{}') || {}; } catch (e) {}
+    var cups = calcCommissionCups(counts, cats);
+    var rate = num(r.Commission_Rate) || defaultRate;
+    var total = Math.round(cups * rate * 100) / 100;
+    totalByDate[dateKey(r.Date)] = total;
+    if (num(r.Commission_Cups) === cups && num(r.Commission_Total) === total) return;
+    var idx = r._rowIndex;
+    delete r._rowIndex;
+    r.Commission_Cups = cups;
+    r.Commission_Rate = rate;
+    r.Commission_Total = total;
+    updateRowObj(SHEET_TABS.DAILY, idx, r);
+    changedDays++;
+  });
+  var changedPays = 0;
+  readRows(SHEET_TABS.COM_PAY).forEach(function (p) {
+    if (p.Status !== 'unpaid') return;
+    var t = totalByDate[dateKey(p.Date)];
+    if (t === undefined || num(p.Amount) === t) return;
+    var idx = p._rowIndex;
+    delete p._rowIndex;
+    p.Amount = t;
+    updateRowObj(SHEET_TABS.COM_PAY, idx, p);
+    changedPays++;
+  });
+  return { days: changedDays, pays: changedPays };
+}
+
+/** รันมือครั้งเดียวจาก Apps Script editor: เปิดนับค่าคอมให้ PREMIUM + Secret Kub eiei แล้วคำนวณย้อนหลัง */
+function fixCountPremiumAndSecretKub() {
+  var want = { PREMIUM: 1, SECRETKUBEIEI: 1 };
+  readRows(SHEET_TABS.CATEGORIES).forEach(function (c) {
+    if (!want[normalizeCatName(c.Name)] || isTrue(c.Count_Commission)) return;
+    c.Count_Commission = true;
+    var idx = c._rowIndex;
+    delete c._rowIndex;
+    updateRowObj(SHEET_TABS.CATEGORIES, idx, c);
+  });
+  var r = recalcCommissionAll();
+  console.log('recalc: ' + r.days + ' days, ' + r.pays + ' unpaid rows updated');
+}
+
 function actionSaveShift(req) {
   requireRole(req, 'manager');
   var date = String(req.date || '');
