@@ -600,6 +600,11 @@
       <p class="muted small" style="margin:4px 0 2px;line-height:1.5;">พนักงานเห็นทุกอย่างเป็นแก้ว / บิล / ครั้ง ไม่มีตัวเลขบาท — กดเพื่อดูว่าพนักงานเห็นอะไร</p>
       <button class="btn ghost" id="btnPreview" onclick="togglePreview()">👀 ดูแบบพนักงาน</button>
     </div>
+    <div class="card" id="setStaff">
+      <div class="b brown">👥 พนักงานและสิทธิ์</div>
+      <p class="muted small" style="margin:4px 0 8px;line-height:1.5;">แตะปุ่มสิทธิ์เพื่อสลับ <b>บาริสต้า → ผู้บริหาร → เจ้าของ</b> · ปุ่ม 🚫 ปิดการใช้งานคนที่ออกไปแล้ว (ข้อมูลเก่ายังอยู่ครบ)</p>
+      <div id="setStaffList"><div class="muted small">กำลังโหลด...</div></div>
+    </div>
     <div class="card" id="setCats">
       <div class="b brown">🧾 หมวดสินค้า · นับค่าคอมไหม</div>
       <p class="muted small" style="margin:4px 0 8px;line-height:1.5;">หมวดใหม่ที่ POS ส่งมา ระบบตั้ง "ไม่นับ" ไว้ก่อน — แตะเพื่อสลับ ระบบจะคำนวณแก้วค่าคอมย้อนหลังให้ทุกวันอัตโนมัติ</p>
@@ -1651,6 +1656,9 @@ function openSettings() {
   $('setPreview').classList.toggle('hidden', !isMgr());
   $('setCats').classList.toggle('hidden', !isMgr());
   if (isMgr()) renderCatSettings();
+  const owner = myLevel() >= ROLE_LEVEL.owner;
+  $('setStaff').classList.toggle('hidden', !owner);
+  if (owner) loadStaffAdmin();
   $('btnPreview').textContent = previewStaff ? '🔙 กลับมาดูแบบผู้บริหาร' : '👀 ดูแบบพนักงาน (ซ่อนตัวเงินทั้งหมด)';
   if (!$('resendDate').value) $('resendDate').value = todayISO();
   $('sysInfo').innerHTML =
@@ -1661,6 +1669,71 @@ function openSettings() {
     '📊 ข้อมูลทั้งหมดอยู่ใน Google Sheets ของร้าน';
   openSheet('shSettings');
 }
+// ══════════ 👥 พนักงานและสิทธิ์ (เจ้าของเท่านั้น) ══════════
+let staffAdmin = null;
+const ROLE_NEXT = { barista: 'manager', manager: 'owner', owner: 'barista' };
+const ROLE_ICON = { barista: '☕', manager: '📋', owner: '👑' };
+
+async function loadStaffAdmin() {
+  try {
+    staffAdmin = await api({ action: 'getStaffAdmin' });
+    renderStaffAdmin();
+  } catch (e) {
+    $('setStaffList').innerHTML = '<div class="muted small">โหลดไม่สำเร็จ: ' + esc(e.message) + '</div>';
+  }
+}
+
+function renderStaffAdmin() {
+  if (!staffAdmin) return;
+  const order = { owner: 0, manager: 1, barista: 2 };
+  const list = staffAdmin.staff.slice().sort((a, b) =>
+    (a.active === b.active ? 0 : (a.active ? -1 : 1)) || (order[a.role] - order[b.role]));
+  $('setStaffList').innerHTML = list.map(s => {
+    const isMe = s.id === staffAdmin.meId;
+    return '<div class="row"' + (s.active ? '' : ' style="opacity:.5"') + '>' +
+      '<div class="main"><div class="t">' + ROLE_ICON[s.role] + ' ' + esc(s.nickname || s.name) +
+      (isMe ? ' <span class="muted small">(คุณ)</span>' : '') + (s.active ? '' : ' <span class="muted small">· ปิดใช้งาน</span>') + '</div>' +
+      '<div class="s">' + esc(s.name) + ' · ' + esc(ROLE_TH[s.role] || s.role) + '</div></div>' +
+      '<div class="btn-row" style="flex:0 0 auto">' +
+      '<button class="chip sm' + (s.role === 'barista' ? '' : ' on') + '" data-id="' + esc(s.id) +
+      '" onclick="cycleRole(this.dataset.id, this)">' + esc(ROLE_TH[s.role] || s.role) + '</button>' +
+      (isMe ? '' : '<button class="chip sm" data-id="' + esc(s.id) + '" onclick="toggleStaffActive(this.dataset.id, this)">' +
+        (s.active ? '🚫' : '↩︎') + '</button>') +
+      '</div></div>';
+  }).join('') || '<div class="muted small">ยังไม่มีพนักงานในระบบ</div>';
+}
+
+async function saveStaffRole(staffId, patch, btn) {
+  const prev = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const d = await api(Object.assign({ action: 'setStaffRole', staffId }, patch));
+    const s = staffAdmin.staff.find(x => x.id === staffId);
+    if (s) { s.role = d.role; s.active = d.active; }
+    // สิทธิ์เปลี่ยน = รายชื่อที่ทั้งแอปใช้ก็ต้องอัปเดตตาม (ชิปเลือกคนรับค่าคอม ฯลฯ)
+    const inList = staffList.find(x => x.name === d.name);
+    if (inList) inList.role = d.role;
+    showToast('✓ ' + (d.nickname || d.name) + ' → ' + (d.active ? (ROLE_TH[d.role] || d.role) : 'ปิดใช้งาน'), 3500);
+    renderStaffAdmin();
+  } catch (e) {
+    showToast(e.message, 5000);
+    if (btn) { btn.disabled = false; btn.textContent = prev; }
+    renderStaffAdmin();
+  }
+}
+
+function cycleRole(staffId, btn) {
+  const s = staffAdmin.staff.find(x => x.id === staffId);
+  if (!s) return;
+  saveStaffRole(staffId, { role: ROLE_NEXT[s.role] || 'barista' }, btn);
+}
+
+function toggleStaffActive(staffId, btn) {
+  const s = staffAdmin.staff.find(x => x.id === staffId);
+  if (!s) return;
+  saveStaffRole(staffId, { active: !s.active }, btn);
+}
+
 function renderCatSettings() {
   $('setCatsList').innerHTML = categories.map(c => {
     const on = isComCat(c);

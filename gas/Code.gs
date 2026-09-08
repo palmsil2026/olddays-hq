@@ -179,6 +179,8 @@ function route(action, req) {
     case 'saveShift':          return actionSaveShift(req);
     case 'disableIngredient':  return actionDisableIngredient(req);
     case 'setCategoryCommission': return actionSetCategoryCommission(req);
+    case 'getStaffAdmin':      return actionGetStaffAdmin(req);
+    case 'setStaffRole':       return actionSetStaffRole(req);
 
     // ── สต๊อก ──
     case 'getStock':         return actionGetStock(req);
@@ -1255,6 +1257,59 @@ function fixCountPremiumAndSecretKub() {
   });
   var r = recalcCommissionAll();
   console.log('recalc: ' + r.days + ' days, ' + r.pays + ' unpaid rows updated');
+}
+
+/** 👥 ทะเบียนพนักงาน+สิทธิ์ (เจ้าของเท่านั้น) — LINE_User_ID ไม่ส่งให้ใครนอกจากเจ้าของ */
+function actionGetStaffAdmin(req) {
+  var me = requireRole(req, 'owner');
+  return {
+    meId: String(me.LINE_User_ID),
+    staff: readRows(SHEET_TABS.STAFF).map(function (s) {
+      return {
+        id: String(s.LINE_User_ID), name: String(s.Name || ''),
+        nickname: String(s.Nickname || ''), role: String(s.Role || 'barista'),
+        active: isTrue(s.Active), createdAt: dateKey(s.Created_At),
+      };
+    }),
+  };
+}
+
+/**
+ * เปลี่ยนสิทธิ์ / เปิด-ปิดการใช้งาน / แก้ชื่อเล่นของพนักงาน (เจ้าของเท่านั้น)
+ * กันล็อกตัวเอง: ห้ามลดสิทธิ์/ปิดใช้งานตัวเอง และต้องเหลือเจ้าของที่ใช้งานได้ ≥ 1 คนเสมอ
+ */
+function actionSetStaffRole(req) {
+  var me = requireRole(req, 'owner');
+  var targetId = String(req.staffId || '');
+  var rows = readRows(SHEET_TABS.STAFF);
+  var target = null;
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i].LINE_User_ID) === targetId) { target = rows[i]; break; }
+  }
+  if (!target) throw new Error('ไม่พบพนักงานคนนี้ในทะเบียน');
+
+  var role = req.role === undefined ? String(target.Role) : String(req.role);
+  if (['barista', 'manager', 'owner'].indexOf(role) === -1) throw new Error('สิทธิ์ไม่ถูกต้อง');
+  var active = req.active === undefined ? isTrue(target.Active) : (req.active === true || req.active === 'true');
+  var demoting = (role !== 'owner' || !active);
+
+  if (targetId === String(me.LINE_User_ID) && demoting) {
+    throw new Error('เปลี่ยนสิทธิ์ของตัวเองไม่ได้ (กันล็อกตัวเองออกจากระบบ) — ให้เจ้าของอีกคนเปลี่ยนให้');
+  }
+  var activeOwners = rows.filter(function (r) {
+    return isTrue(r.Active) && String(r.Role) === 'owner';
+  });
+  if (demoting && activeOwners.length <= 1 && String(activeOwners[0] && activeOwners[0].LINE_User_ID) === targetId) {
+    throw new Error('ต้องเหลือเจ้าของที่ใช้งานได้อย่างน้อย 1 คน');
+  }
+
+  var idx = target._rowIndex;
+  delete target._rowIndex;
+  target.Role = role;
+  target.Active = active;
+  if (req.nickname !== undefined) target.Nickname = String(req.nickname).trim();
+  updateRowObj(SHEET_TABS.STAFF, idx, target);
+  return { id: targetId, name: target.Name, nickname: target.Nickname, role: role, active: active };
 }
 
 function actionSaveShift(req) {
