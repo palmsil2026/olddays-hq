@@ -242,12 +242,16 @@ function route(action, req) {
 // ═══════════════════════════════════════════════════════════════
 
 function ensureSetup() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ss = activeSS();
   var created = false;
+  // ถามรายชื่อแท็บทีเดียว (เดิมถาม getSheetByName ทีละแท็บ ~19 ครั้งทุกคำขอ)
+  var have = {};
+  ss.getSheets().forEach(function (sh) { have[sh.getName()] = sh; _sheetMemo[sh.getName()] = sh; });
   Object.keys(HEADERS).forEach(function (name) {
-    var sheet = ss.getSheetByName(name);
+    var sheet = have[name];
     if (!sheet) {
       sheet = ss.insertSheet(name);
+      _sheetMemo[name] = sheet;
       sheet.appendRow(HEADERS[name]);
       sheet.setFrozenRows(1);
       created = true;
@@ -283,13 +287,22 @@ function seedSheet(name, sheet) {
 //  Helpers: sheet <-> object
 // ═══════════════════════════════════════════════════════════════
 
+// ⚡ ความเร็ว: GAS เริ่มใหม่ทุกคำขอ ตัวแปรระดับไฟล์จึงอยู่แค่ใน 1 คำขอ — ใช้จำผลได้ปลอดภัย
+// (แต่ละครั้งที่คุยกับ Google Sheets กิน ~50–300ms เลยต้องไม่ถามซ้ำ)
+var _ss = null, _tz = null, _sheetMemo = {}, _rowsMemo = {};
+function activeSS() { return _ss || (_ss = SpreadsheetApp.getActiveSpreadsheet()); }
+function sheetTZ() { return _tz || (_tz = activeSS().getSpreadsheetTimeZone()); }
+/** ต้องเรียกหลังเขียนชีตทุกครั้ง ไม่งั้น readRows รอบถัดไปจะได้ข้อมูลเก่า (appendRowObj/updateRowObj ทำให้แล้ว) */
+function invalidateRows(name) { if (name) delete _rowsMemo[name]; else _rowsMemo = {}; }
+
 function getSheet(name) {
-  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  if (!_sheetMemo[name]) _sheetMemo[name] = activeSS().getSheetByName(name);
+  return _sheetMemo[name];
 }
 
 function readRows(name) {
-  var sheet = getSheet(name);
-  var values = sheet.getDataRange().getValues();
+  // อ่านชีตจริงครั้งเดียวต่อคำขอ แต่สร้าง object ใหม่ทุกครั้ง — ผู้เรียกแก้ค่าในแถวได้โดยไม่ทำ cache เพี้ยน
+  var values = _rowsMemo[name] || (_rowsMemo[name] = getSheet(name).getDataRange().getValues());
   var headers = values[0];
   var rows = [];
   for (var i = 1; i < values.length; i++) {
@@ -307,6 +320,7 @@ function appendRowObj(name, obj) {
   sheet.appendRow(headers.map(function (h) {
     return obj[h] !== undefined ? obj[h] : '';
   }));
+  invalidateRows(name);
 }
 
 function updateRowObj(name, rowIndex, obj) {
@@ -314,6 +328,7 @@ function updateRowObj(name, rowIndex, obj) {
   var headers = HEADERS[name];
   var row = headers.map(function (h) { return obj[h] !== undefined ? obj[h] : ''; });
   sheet.getRange(rowIndex, 1, 1, headers.length).setValues([row]);
+  invalidateRows(name);
 }
 
 function getConfig() {
@@ -332,7 +347,7 @@ function isTrue(v) {
  */
 function dateKey(v) {
   if (v && typeof v.getTime === 'function') {
-    var tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+    var tz = sheetTZ();
     return Utilities.formatDate(v, tz, 'yyyy-MM-dd');
   }
   return String(v);
@@ -502,6 +517,7 @@ function actionSubmitDailyClose(req) {
     var sheet = getSheet(SHEET_TABS.DAILY);
     existing.sort(function (a, b) { return b._rowIndex - a._rowIndex; })
       .forEach(function (r) { sheet.deleteRow(r._rowIndex); });
+    invalidateRows(SHEET_TABS.DAILY);
     deleteRowsByDate(SHEET_TABS.SALES_ROWS, date);
     // CommissionPay ไม่ลบ — การจ่ายค่าคอมเป็นเรื่องหลังบ้าน แยกจากการแก้ยอด
   }
@@ -558,6 +574,7 @@ function deleteRowsByDate(tabName, date) {
   var rows = readRows(tabName).filter(function (r) { return dateKey(r.Date) === date; });
   rows.sort(function (a, b) { return b._rowIndex - a._rowIndex; })
     .forEach(function (r) { sheet.deleteRow(r._rowIndex); });
+  invalidateRows(tabName);
 }
 
 function actionGetDailyClose(req) {
@@ -739,6 +756,7 @@ function actionDeleteStockMove(req) {
   updateRowObj(SHEET_TABS.INGREDIENTS, keep, ing);
 
   getSheet(SHEET_TABS.STOCK_MOVES).deleteRow(target._rowIndex);
+  invalidateRows(SHEET_TABS.STOCK_MOVES);
 
   return { balance: prevBalance };
 }
@@ -1744,6 +1762,7 @@ function saveImportedClose(parsed) {
     var sheet = getSheet(SHEET_TABS.DAILY);
     existing.sort(function (a, b) { return b._rowIndex - a._rowIndex; })
       .forEach(function (r) { sheet.deleteRow(r._rowIndex); });
+    invalidateRows(SHEET_TABS.DAILY);
     deleteRowsByDate(SHEET_TABS.SALES_ROWS, date);
   }
 
@@ -2278,6 +2297,7 @@ function actionUndoMemberLog(req) {
   var mine = String(l.By) === String(staff.Name) && dateKey(l.Timestamp) === todayKey();
   if (!isMgr && !mine) throw new Error('ยกเลิกได้เฉพาะรายการที่คุณบันทึกเองวันนี้ — รายการอื่นให้ผู้บริหารจัดการ');
   getSheet(SHEET_TABS.MEMBER_LOG).deleteRow(l._rowIndex);
+  invalidateRows(SHEET_TABS.MEMBER_LOG);
   var id = String(l.Member_ID);
   return { member: summarizeMember(findMemberRow(id), memberLogsById()[id], memberRules(), todayKey()) };
 }

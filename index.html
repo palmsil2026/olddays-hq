@@ -14,8 +14,12 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <link rel="preconnect" href="https://script.google.com" crossorigin />
+  <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin />
+  <!-- ฟอนต์โหลดแบบไม่บล็อกหน้า (ระหว่างรอใช้ฟอนต์เครื่องไปก่อน) -->
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+  <!-- defer = โหลดขนานกับหน้า ไม่บล็อก — init() รอ DOMContentLoaded ซึ่งเกิดหลังสคริปต์ defer รันเสร็จเสมอ -->
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js" defer></script>
 
   <style>
     :root {
@@ -880,12 +884,51 @@ async function api(body) {
   if (!data.ok) throw new Error(data.error || 'เกิดข้อผิดพลาด');
   return data;
 }
-async function monthDays(month) {
-  if (!monthCache[month]) {
-    try { const r = await api({ action: 'getReport', month }); monthCache[month] = r.days || []; monthCache[month]._totals = r.totals; }
-    catch (e) { monthCache[month] = []; }
+// ── จำข้อมูลในเครื่อง: เปิดแอปรอบหน้าเห็นตัวเลขทันที แล้วอัปเดตเงียบๆ เมื่อของใหม่มาถึง ──
+// คีย์ผูกกับสิทธิ์ (role) — ข้อมูลของบาริสต้า (ไม่มีตัวเงิน) กับผู้บริหารไม่ปนกัน
+function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function lsClearData() {
+  try { Object.keys(localStorage).filter(k => /^od_(month|mem)_/.test(k)).forEach(k => localStorage.removeItem(k)); } catch (e) {}
+}
+function lsKey(kind, id) { return 'od_' + kind + '_' + (me ? me.Role : '') + '_' + (id || ''); }
+let softTimer = null;
+function softRefresh() {   // วาดแท็บปัจจุบันใหม่ด้วยข้อมูลล่าสุด (ไม่เลื่อนจอ ไม่ขึ้นโครงโหลด)
+  clearTimeout(softTimer);
+  softTimer = setTimeout(() => {
+    const f = { home: loadHome, report: loadReport, com: loadCom }[currentTab];
+    if (f) f();
+  }, 120);
+}
+const monthInflight = {};   // คำขอที่กำลังวิ่งอยู่ — เรียกซ้ำระหว่างรอ = ใช้ของเดิม ไม่ยิงใหม่
+function fetchMonth(month) {
+  if (!monthInflight[month]) {
+    monthInflight[month] = api({ action: 'getReport', month }).then(r => {
+      const days = r.days || []; days._totals = r.totals;
+      monthCache[month] = days;
+      if (me) lsSet(lsKey('month', month), { days, totals: r.totals });
+      delete monthInflight[month];
+      return days;
+    }, e => { delete monthInflight[month]; throw e; });
   }
-  return monthCache[month];
+  return monthInflight[month];
+}
+async function monthDays(month) {
+  if (monthCache[month]) return monthCache[month];
+  const c = lsGet(lsKey('month', month));
+  if (c && c.days) {
+    const days = c.days; days._totals = c.totals; monthCache[month] = days;
+    fetchMonth(month).then(fresh => {
+      if (JSON.stringify(fresh) !== JSON.stringify(c.days) || JSON.stringify(fresh._totals) !== JSON.stringify(c.totals)) softRefresh();
+    }).catch(() => {});
+    return days;
+  }
+  try {
+    const days = await fetchMonth(month);
+    // จำลงเครื่องตรงนี้ด้วย — ตอนยอดมาถึงก่อนข้อมูลผู้ใช้ (me ยังว่าง) fetchMonth จะข้ามการจำไป
+    lsSet(lsKey('month', month), { days, totals: days._totals });
+    return days;
+  } catch (e) { monthCache[month] = []; return monthCache[month]; }
 }
 
 // ══════════════════════════════════════════
@@ -910,8 +953,10 @@ async function init() {
     liff.init({ liffId: LIFF_ID }).then(async () => {
       clearTimeout(timer);
       if (liff.isLoggedIn()) {
-        const profile = await liff.getProfile();
-        resolve({ status: 'ok', userId: profile.userId });
+        // userId มีในเครื่องอยู่แล้วหลัง init — ขอโปรไฟล์ผ่านเน็ตเฉพาะตอนหาไม่เจอ
+        const ctxId = (liff.getContext && liff.getContext() || {}).userId;
+        const userId = ctxId || (await liff.getProfile()).userId;
+        resolve({ status: 'ok', userId });
       } else { liff.login(); resolve({ status: 'redirect' }); }
     }).catch((e) => { clearTimeout(timer); resolve({ status: 'error', message: e.message }); });
   });
@@ -933,8 +978,26 @@ async function init() {
     lineUserId = 'dev-' + localStorage.getItem('olddays_dev_id');
   }
 
+  // เปิดแอปครั้งถัดไป: ใช้ข้อมูลร้านที่จำไว้เปิดหน้าจอทันที แล้วค่อยเช็คของใหม่เบื้องหลัง
+  const bootKey = 'od_boot_' + lineUserId;
+  const cachedBoot = lsGet(bootKey);
+  if (cachedBoot && cachedBoot.staff) {
+    applyBootstrap(cachedBoot);
+    enterApp();
+    api({ action: 'bootstrap' }).then(fresh => {
+      lsSet(bootKey, fresh);
+      if (JSON.stringify(fresh) === JSON.stringify(cachedBoot)) return;
+      const roleChanged = !fresh.staff || fresh.staff.Role !== cachedBoot.staff.Role;
+      applyBootstrap(fresh);
+      if (!me) { lsClearData(); location.reload(); return; }   // ถูกปิดใช้งาน → เริ่มใหม่ให้ขึ้นหน้าที่ถูกต้อง
+      if (roleChanged) { lsClearData(); Object.keys(monthCache).forEach(k => delete monthCache[k]); enterApp(); }
+    }).catch(() => {});
+    return;
+  }
+
   setLoadingText('กำลังโหลดข้อมูลร้าน...');
-  try { applyBootstrap(await api({ action: 'bootstrap' })); }
+  fetchMonth(thisMonthISO()).catch(() => {});   // ขอยอดเดือนนี้พร้อมกับข้อมูลร้านเลย ไม่ต้องรอต่อคิว
+  try { const b = await api({ action: 'bootstrap' }); applyBootstrap(b); if (b.staff) lsSet(bootKey, b); }
   catch (e) { showInitError('เชื่อมต่อระบบไม่ได้: ' + e.message); return; }
 
   if (!me) { showScreen('scRegister'); return; }
@@ -973,6 +1036,8 @@ const TABS = [
   { id: 'com', ico: '💰', label: 'ค่าคอม', screen: 'scCom', minRole: 'manager' },
 ];
 function enterApp() {
+  // ยอดที่ขอล่วงหน้าตอนเปิดแอป (มาถึงก่อนรู้สิทธิ์ผู้ใช้) — จำลงเครื่องตอนนี้ที่รู้สิทธิ์แล้ว
+  Object.keys(monthCache).forEach(m => { if (monthCache[m].length) lsSet(lsKey('month', m), { days: monthCache[m], totals: monthCache[m]._totals }); });
   $('scLoading').classList.remove('active');
   $('app').classList.remove('hidden');
   const nick = me.Nickname || me.Name;
@@ -1002,6 +1067,7 @@ function showTab(tab) {
 }
 function refreshTab() {
   Object.keys(monthCache).forEach(k => delete monthCache[k]);
+  lsClearData();   // กด ↻ = อยากได้ของสดจริง ไม่ใช้ของที่จำไว้
   showTab(currentTab);
   showToast('โหลดข้อมูลใหม่แล้ว');
 }
@@ -1012,6 +1078,7 @@ function refreshTab() {
 let dayCursor = null;
 
 async function loadHome() {
+  loadHomeSide();   // ยิงพร้อมกันเลย ไม่ต้องรอยอดขาย
   const month = thisMonthISO();
   $('monthTag').textContent = thaiMonth(month);
   dayCursor = todayISO();
@@ -1043,6 +1110,10 @@ async function loadHome() {
     $('dayHero').innerHTML = '<div class="hero-empty"><div class="em">😵</div><div class="t">โหลดไม่สำเร็จ</div><div class="s">' + esc(e.message) + '</div></div>';
   }
 
+}
+
+// โหลดพร้อมกับยอดขาย: สต๊อกใกล้หมด · การ์ดสมาชิก · เบิกซื้อรออนุมัติ
+function loadHomeSide() {
   // สต๊อกใกล้หมด
   api({ action: 'getStock' }).then(d => {
     stockCache = d.ingredients || [];
@@ -1959,11 +2030,15 @@ function memTime(iso) {
 
 // ── โหลด + หน้ารวม ──
 async function loadMembers() {
+  const cached = memData || lsGet(lsKey('mem'));
+  if (cached && cached.members) { memData = cached; renderMembersPage(); }
   try {
-    memData = await api({ action: 'getMembers' });
-    renderMembersPage();
+    const fresh = await api({ action: 'getMembers' });
+    const changed = JSON.stringify(fresh) !== JSON.stringify(memData);
+    memData = fresh; lsSet(lsKey('mem'), fresh);
+    if (changed && currentTab === 'member') renderMembersPage();
   } catch (e) {
-    $('memList').innerHTML = '<div class="card">' + emptyHTML('😵', 'โหลดสมาชิกไม่สำเร็จ<br>' + esc(e.message)) + '</div>';
+    if (!cached) $('memList').innerHTML = '<div class="card">' + emptyHTML('😵', 'โหลดสมาชิกไม่สำเร็จ<br>' + esc(e.message)) + '</div>';
   }
 }
 
@@ -2077,7 +2152,7 @@ async function renderMemSync() {
 async function loadHomeMembers() {
   try {
     const d = await api({ action: 'getMembers' });
-    memData = d;
+    memData = d; lsSet(lsKey('mem'), d);
     const st = d.stats;
     if (!d.members.length) { $('homeMem').classList.add('hidden'); return; }
     const low = (d.candles || []).filter(c => c.stock <= c.min);
@@ -2448,7 +2523,7 @@ async function doMemberImport(btn) {
   } catch (e) { showToast(e.message, 5000); btn.disabled = false; btn.textContent = '📥 นำเข้า ' + memImportRows.length + ' คน'; }
 }
 
-init();
+document.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
 </html>
