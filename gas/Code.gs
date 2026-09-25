@@ -141,7 +141,7 @@ var WRITE_ACTIONS = {
   unpayCommission: 1, disableIngredient: 1, setCategoryCommission: 1, markStockChecked: 1,
   setStaffRole: 1, saveShift: 1,
   createMember: 1, addMemberCups: 1, redeemMember: 1, renewMember: 1, updateMember: 1,
-  undoMemberLog: 1, adjustCandle: 1, importMembers: 1,
+  undoMemberLog: 1, adjustCandle: 1, importMembers: 1, setIngredientMin: 1,
 };
 
 function handleRequest(e) {
@@ -222,6 +222,7 @@ function route(action, req) {
     case 'stockMove':        return actionStockMove(req);
     case 'deleteStockMove':  return actionDeleteStockMove(req);
     case 'markStockChecked': return actionMarkStockChecked(req);
+    case 'setIngredientMin': return actionSetIngredientMin(req);
 
     // ── เบิกซื้อ ──
     case 'getPurchases':     return actionGetPurchases(req);
@@ -705,7 +706,52 @@ function actionMarkStockChecked(req) {
   if (existing) return { already: true, by: existing.by, at: existing.at };
   var now = new Date();
   appendRowObj(SHEET_TABS.STOCK_CHECKS, { Date: dateKey(now), Checked_By: staff.Name, Checked_At: now, Note: String(req.note || '') });
-  return { already: false, by: staff.Name, at: now };
+  // กดเช็คครั้งแรกของวัน → คุณเลขาแจ้งของที่ถึง/ต่ำกว่าขั้นต่ำลงกลุ่ม (ไม่มีของใกล้หมด = ไม่ส่ง ไม่ spam)
+  var low = lowStockItems();
+  var pushed = false;
+  if (low.length) {
+    var r = notifyGroup(buildLowStockText(low, nickOf(staff.Name)));
+    pushed = !!(r && r.pushed);
+  }
+  return { already: false, by: staff.Name, at: now, low: low, pushed: pushed };
+}
+
+// ของที่ "ใกล้หมด" = คงเหลือ ≤ ขั้นต่ำ (กติกาเดียวกับป้ายแดงในแอป)
+function lowStockItems() {
+  return readRows(SHEET_TABS.INGREDIENTS).filter(function (i) {
+    return isTrue(i.Active) && num(i.Current_Stock) <= num(i.Min_Stock);
+  }).map(function (i) {
+    return { id: i.Ingredient_ID, name: String(i.Name), unit: String(i.Unit || ''), stock: num(i.Current_Stock), min: num(i.Min_Stock) };
+  });
+}
+function buildLowStockText(low, byNick) {
+  var lines = ['⚠️ ของใกล้หมด ' + low.length + ' รายการ' + (byNick ? ' (เช็คสต๊อกโดย ' + byNick + ')' : '')];
+  low.forEach(function (i) {
+    lines.push('• ' + i.name + ' เหลือ ' + i.stock + (i.unit ? ' ' + i.unit : '') + ' (ขั้นต่ำ ' + i.min + ')' + (i.stock <= 0 ? ' ❗หมดแล้ว' : ''));
+  });
+  lines.push('ใครว่างช่วยเติม/สั่งเพิ่มด้วยนะคะ 🙏');
+  return lines.join('\n');
+}
+
+// ตั้ง/แก้ "ขั้นต่ำ" ของวัตถุดิบ — พนักงานทุกคนแก้ได้ (คนหน้าร้านรู้ดีสุดว่าควรเหลือเท่าไหร่)
+function actionSetIngredientMin(req) {
+  requireStaff(req);
+  if (req.minStock === '' || req.minStock == null || isNaN(Number(req.minStock))) throw new Error('กรอกขั้นต่ำเป็นตัวเลข');
+  var min = num(req.minStock);
+  if (min < 0) throw new Error('ขั้นต่ำติดลบไม่ได้');
+  var rows = readRows(SHEET_TABS.INGREDIENTS);
+  var ing = null;
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].Ingredient_ID === req.ingredientId) { ing = rows[i]; break; }
+  }
+  if (!ing) throw new Error('ไม่พบวัตถุดิบ');
+  var prev = num(ing.Min_Stock);
+  var keep = ing._rowIndex;
+  delete ing._rowIndex;
+  ing.Min_Stock = min;
+  ing.Updated_At = new Date();
+  updateRowObj(SHEET_TABS.INGREDIENTS, keep, ing);
+  return { minStock: min, prev: prev, low: num(ing.Current_Stock) <= min };
 }
 
 // ลบ/undo รายการเคลื่อนไหวสต๊อกที่เพิ่งกดผิด — ลบได้เฉพาะรายการ "ล่าสุด" ของวัตถุดิบนั้นๆ เท่านั้น
@@ -1856,7 +1902,7 @@ function saveImportedClose(parsed) {
 function buildOpsAlertText() {
   var lines = [];
 
-  // ไม่ลิสต์ของใกล้หมดในกลุ่มแล้ว (ถ้าใกล้หมดพนักงานแจ้งกันเอง) — เตือนแค่ "วันนี้ยังไม่มีใครกดเช็คสต๊อก"
+  // ของใกล้หมดแจ้งลงกลุ่มตอนมีคนกด "เช็คสต๊อกแล้ว" (actionMarkStockChecked) — ตรงนี้เตือนแค่ "วันนี้ยังไม่มีใครกดเช็คสต๊อก"
   if (!todayStockCheck()) {
     lines.push('อย่าลืมเช็คสต๊อกนะคะ 🙏');
     lines.push('(เปิดแอป → 📦 สต๊อก → ดูของแล้วกด ✅ เช็คสต๊อกแล้ว)');

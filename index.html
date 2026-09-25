@@ -628,6 +628,15 @@
     <div class="grab"></div>
     <div class="sheet-h"><h3 id="smTitle">วัตถุดิบ</h3><button class="x" onclick="closeSheet('shStock')">✕</button></div>
     <div class="muted small" id="smInfo"></div>
+    <div id="smMinRow" class="hidden" style="margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:#FFFBF2">
+      <label class="fl" style="margin-top:0">ขั้นต่ำ — เหลือเท่านี้หรือน้อยกว่า = ใกล้หมด</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="number" id="smMin" inputmode="decimal" step="0.01" min="0" placeholder="0" style="flex:1;margin:0" />
+        <span class="muted small" id="smMinUnit"></span>
+        <button class="btn" style="width:auto;margin:0;padding:10px 16px" onclick="saveIngredientMin(this)">บันทึก</button>
+      </div>
+      <div class="muted small" style="margin-top:6px">ตอนกด ✅ เช็คสต๊อก คุณเลขาจะแจ้งของที่ถึงขั้นต่ำลงกลุ่มให้</div>
+    </div>
     <div class="seg" style="margin-top:12px;">
       <button data-move="in" class="on" onclick="pickMoveType(this)">📥 รับเข้า</button>
       <button data-move="out" onclick="pickMoveType(this)">📤 ตัดออก</button>
@@ -1539,7 +1548,7 @@ function renderStockCheckCard() {
     ? '<div class="card tight" style="border-color:#BFD5BC;background:#F3F8F1;display:flex;align-items:center;gap:10px;margin-bottom:0"><span style="font-size:24px">✅</span>' +
       '<div><div class="b" style="color:var(--green)">เช็คสต๊อกวันนี้แล้ว</div><div class="muted small">โดย ' + esc(nickOf(stockCheckToday.by)) + ' เวลา ' + checkTime(stockCheckToday.at) + ' · ขอบคุณค่ะ 🙏</div></div></div>'
     : '<div class="card" style="border-color:#E8CF98;background:#FFFBF2;margin-bottom:0"><div class="b" style="font-size:15px;color:#7A5417">📦 เช็คสต๊อกประจำวัน</div>' +
-      '<div class="muted small" style="margin:2px 0 4px;line-height:1.5">ไล่ดูของในร้านเทียบกับรายการด้านล่าง ถ้าอะไรใกล้หมดแจ้งในกลุ่มได้เลย เสร็จแล้วกดปุ่มนี้ (วันละครั้ง ใครกดก็ได้)</div>' +
+      '<div class="muted small" style="margin:2px 0 4px;line-height:1.5">ไล่ดูของในร้านเทียบกับรายการด้านล่าง (ของไม่ตรงกด "นับสต๊อก" แก้ก่อน) เสร็จแล้วกดปุ่มนี้ — คุณเลขาจะแจ้งของที่ถึงขั้นต่ำลงกลุ่มให้เอง (วันละครั้ง ใครกดก็ได้)</div>' +
       '<button class="btn green" style="margin-top:8px" onclick="markStockChecked(this)">✅ เช็คสต๊อกวันนี้แล้ว</button></div>';
 }
 async function markStockChecked(btn) {
@@ -1547,7 +1556,10 @@ async function markStockChecked(btn) {
   try {
     const d = await api({ action: 'markStockChecked' });
     stockCheckToday = { by: d.by, at: d.at };
-    showToast(d.already ? 'วันนี้มีคนเช็คไปแล้ว ✓' : 'บันทึกแล้ว ขอบคุณค่ะ ✅', 3000);
+    const nLow = (d.low || []).length;
+    showToast(d.already ? 'วันนี้มีคนเช็คไปแล้ว ✓'
+      : nLow ? 'บันทึกแล้ว ✅ ' + (d.pushed ? 'แจ้งของใกล้หมด ' + nLow + ' รายการลงกลุ่มแล้ว' : 'ของใกล้หมด ' + nLow + ' รายการ (ส่งเข้ากลุ่มไม่สำเร็จ)')
+      : 'บันทึกแล้ว ของครบทุกอย่าง ขอบคุณค่ะ ✅', 3500);
     renderStockCheckCard(); renderStockCheckBanner();
   } catch (e) { showToast(e.message, 4000); btn.disabled = false; btn.textContent = '✅ เช็คสต๊อกวันนี้แล้ว'; }
 }
@@ -1605,9 +1617,9 @@ async function deleteStockMove(rowIndex, el) {
 
 function openStockSheet(sid) {
   currentIngredient = stockCache.find(i => safeId(i.Ingredient_ID) === sid); if (!currentIngredient) return;
-  const low = num(currentIngredient.Current_Stock) <= num(currentIngredient.Min_Stock);
   $('smTitle').textContent = ingredientEmoji(currentIngredient.Name) + ' ' + currentIngredient.Name;
-  $('smInfo').innerHTML = 'คงเหลือ <b class="' + (low ? 'red' : 'green') + '">' + num(currentIngredient.Current_Stock) + ' ' + esc(currentIngredient.Unit) + '</b> · ขั้นต่ำ ' + num(currentIngredient.Min_Stock) + (low ? ' <span class="badge low">ใกล้หมด</span>' : '');
+  renderStockInfo();
+  $('smMinRow').classList.add('hidden');
   $('smQty').value = ''; $('smNote').value = '';
   moveType = 'in';
   document.querySelectorAll('#shStock .seg button').forEach(b => b.classList.toggle('on', b.dataset.move === 'in'));
@@ -1615,6 +1627,31 @@ function openStockSheet(sid) {
   const dis = $('btnDisableIng'); dis.classList.toggle('hidden', !isMgr()); dis.dataset.armed = ''; dis.textContent = '🗑 เลิกใช้วัตถุดิบนี้';
   openSheet('shStock');
   setTimeout(() => $('smQty').focus(), 250);
+}
+function renderStockInfo() {
+  const i = currentIngredient; if (!i) return;
+  const low = num(i.Current_Stock) <= num(i.Min_Stock);
+  $('smInfo').innerHTML = 'คงเหลือ <b class="' + (low ? 'red' : 'green') + '">' + num(i.Current_Stock) + ' ' + esc(i.Unit) + '</b> · ขั้นต่ำ <b>' + num(i.Min_Stock) + '</b>' +
+    (low ? ' <span class="badge low">ใกล้หมด</span>' : '') +
+    ' · <a href="javascript:void(0)" style="color:var(--caramel);font-weight:500;text-decoration:none" onclick="toggleMinRow()">✏️ แก้ขั้นต่ำ</a>';
+}
+function toggleMinRow() {
+  const row = $('smMinRow'); const show = row.classList.contains('hidden');
+  row.classList.toggle('hidden', !show);
+  if (show) { $('smMin').value = num(currentIngredient.Min_Stock); $('smMinUnit').textContent = currentIngredient.Unit || ''; setTimeout(() => $('smMin').select(), 50); }
+}
+async function saveIngredientMin(btn) {
+  if (!currentIngredient) return;
+  const raw = $('smMin').value.trim();
+  if (raw === '' || isNaN(Number(raw)) || Number(raw) < 0) { showToast('กรอกขั้นต่ำเป็นตัวเลข 0 ขึ้นไป'); return; }
+  btn.disabled = true;
+  try {
+    const d = await api({ action: 'setIngredientMin', ingredientId: currentIngredient.Ingredient_ID, minStock: Number(raw) });
+    currentIngredient.Min_Stock = d.minStock;
+    $('smMinRow').classList.add('hidden'); renderStockInfo(); renderStock();
+    showToast('ตั้งขั้นต่ำ ' + d.minStock + ' ' + (currentIngredient.Unit || '') + ' แล้ว ✓ (เดิม ' + d.prev + ')' + (d.low ? ' — ตอนนี้ใกล้หมดแล้วนะ' : ''), 3500);
+  } catch (e) { showToast(e.message, 4000); }
+  btn.disabled = false;
 }
 function pickMoveType(el) {
   moveType = el.dataset.move;
