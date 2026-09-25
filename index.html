@@ -330,6 +330,70 @@
     .week-row .v.none { color: var(--muted); font-weight: 400; }
     .nav .brand { display: none; }
 
+    /* ── 🎫 Members ── */
+    .search { position: relative; margin: 12px 0 10px; }
+    .search input { padding-left: 42px; border-radius: 14px; }
+    .search .ic { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); font-size: 15px; opacity: .55; pointer-events: none; }
+    .mem { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; margin-bottom: 10px; box-shadow: var(--shadow); cursor: pointer; }
+    .mem:active { transform: scale(.985); }
+    .mem.off { opacity: .55; }
+    .mem .av { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; color: #fff; flex-shrink: 0; background: linear-gradient(135deg, var(--brown2), var(--caramel)); }
+    .mem .main { flex: 1; min-width: 0; }
+    .mem .n { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mem .s { font-size: 12px; color: var(--muted); margin-top: 1px; }
+    .mem .right { text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+    .dots { display: inline-flex; gap: 3px; vertical-align: middle; }
+    .dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--cream); display: block; }
+    .dots i.on { background: var(--caramel); }
+    .gift { display: inline-block; background: linear-gradient(135deg, #F7E7C4, #F1D9A6); color: #6B4A1E; border-radius: 999px; font-size: 11.5px; font-weight: 700; padding: 3px 9px; white-space: nowrap; }
+    .exp { font-size: 11px; padding: 2px 8px; border-radius: 999px; display: inline-block; white-space: nowrap; }
+    .exp.ok { background: var(--green-bg); color: var(--green); }
+    .exp.warn { background: #F7E7C4; color: #7A5417; }
+    .exp.bad { background: var(--red-bg); color: var(--red); }
+    .mcard { position: relative; overflow: hidden; border-radius: 22px; padding: 18px 18px 16px; color: #FFF7EA; margin-bottom: 14px;
+      background: linear-gradient(135deg, #3A271D 0%, #6B4A37 55%, #B07A3E 100%); box-shadow: 0 14px 30px rgba(74, 51, 39, .28); }
+    .mcard:before { content: ""; position: absolute; right: -40px; top: -60px; width: 200px; height: 200px; border-radius: 50%; background: rgba(255, 231, 176, .10); }
+    .mcard:after { content: "☕"; position: absolute; right: 14px; bottom: -14px; font-size: 96px; opacity: .08; }
+    .mcard > * { position: relative; }
+    .mcard .brand { font-size: 11px; letter-spacing: 2.5px; opacity: .8; font-weight: 600; display: flex; justify-content: space-between; }
+    .mcard .nm { font-size: 22px; font-weight: 700; margin-top: 12px; line-height: 1.15; }
+    .mcard .id { font-size: 12.5px; opacity: .8; margin-top: 3px; letter-spacing: 1px; }
+    .mcard .foot { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 16px; gap: 10px; }
+    .mcard .foot .k { font-size: 11px; opacity: .7; }
+    .mcard .foot .v { font-size: 14px; font-weight: 600; }
+    .mcard .chipc { background: rgba(255, 247, 234, .16); border-radius: 999px; padding: 4px 10px; font-size: 12px; white-space: nowrap; }
+    .mcard.dead { filter: grayscale(.9); opacity: .85; }
+    .stamps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 10px 0 6px; }
+    .stamp { aspect-ratio: 1; border-radius: 50%; border: 2px dashed #D5C8B4; display: flex; align-items: center; justify-content: center; font-size: 22px; background: var(--bg); color: #D5C8B4; font-weight: 600; }
+    .stamp.on { border: 2px solid var(--caramel); background: radial-gradient(circle at 30% 30%, #FBE9C8, #F1D9A6); }
+    .stamp.pop { animation: pop2 .4s ease-out; }
+    @keyframes pop2 { 0% { transform: scale(.5); } 70% { transform: scale(1.15); } 100% { transform: none; } }
+    .reward { display: flex; align-items: center; gap: 12px; background: linear-gradient(135deg, #F7E7C4, #F1D9A6); border: 1px solid #E8CF98; border-radius: 16px; padding: 12px 14px; margin: 10px 0; }
+    .reward .big { font-size: 30px; line-height: 1; }
+    .reward .main { flex: 1; }
+    .reward .t { font-weight: 700; color: #6B4A1E; }
+    .reward .s { font-size: 12px; color: #7A5417; }
+    .candles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    .candle { background: var(--card); border: 1.5px solid var(--line); border-radius: 14px; padding: 10px 3px 8px; text-align: center; cursor: pointer; }
+    .candle:active { transform: scale(.96); }
+    .candle .em { font-size: 24px; line-height: 1; }
+    .candle .nm { font-size: 11.5px; font-weight: 500; margin-top: 5px; line-height: 1.2; }
+    .candle .q { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .candle .bar { height: 4px; border-radius: 3px; background: var(--cream); margin: 6px 6px 0; overflow: hidden; }
+    .candle .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--caramel), var(--gold)); }
+    .candle.on { border-color: var(--caramel); background: #FFF6EA; box-shadow: 0 0 0 3px rgba(192, 122, 54, .15); }
+    .candle.out { opacity: .4; pointer-events: none; }
+    .candle.low .q { color: var(--red); font-weight: 600; }
+    .candle.low .bar i { background: var(--red); }
+    .qty-step { display: flex; align-items: center; gap: 10px; }
+    .qty-step button { width: 50px; height: 50px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); font-size: 24px; color: var(--brown); font-weight: 600; flex-shrink: 0; }
+    .qty-step .bigqty { flex: 1; }
+    .rank { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+    .rank:last-child { border-bottom: none; }
+    .rank .no { font-weight: 700; color: var(--caramel); text-align: center; }
+    .ok-hero { text-align: center; padding: 8px 0 4px; }
+    .ok-hero .em { font-size: 46px; }
+
     /* ══════════ Desktop (เปิดด้วยคอม) ══════════ */
     @media (min-width: 900px) {
       :root { --nav-w: 232px; }
@@ -353,6 +417,8 @@
       .grab { display: none; }
       #toast { bottom: 36px; left: calc(50% + var(--nav-w) / 2); }
       .home-grid, .stock-grid, .com-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+      .mem-grid { display: grid; grid-template-columns: 1.25fr 1fr; gap: 22px; align-items: start; }
+      .mem-grid .col:last-child .tiles { margin-top: 12px; }
       .stock-grid { grid-template-columns: 1.6fr 1fr; }
       .com-grid { grid-template-columns: 1fr 1.35fr; }
       .home-grid .sec-h:first-child, .stock-grid .sec-h { margin-top: 0; }
@@ -440,6 +506,7 @@
         <div class="sec-h" style="margin:0 0 8px"><h2 style="color:var(--red)">⚠️ วัตถุดิบใกล้หมด</h2><button class="act" onclick="showTab('stock')">ไปสต๊อก ›</button></div>
         <div class="chips" id="alertLowList"></div>
       </div>
+      <div id="homeMem" class="card hidden" style="cursor:pointer" onclick="showTab('member')"></div>
       <div id="alertPo" class="card hidden" style="border-color:#E8CF98;background:#FFFBF2;">
         <div class="sec-h" style="margin:0 0 4px"><h2>🛒 เบิกซื้อรออนุมัติ</h2><button class="act" onclick="showTab('purchase')">ดูทั้งหมด ›</button></div>
         <div id="alertPoList"></div>
@@ -514,6 +581,38 @@
       </div>
       <div id="comBody"><div class="card"><div class="sk" style="height:120px"></div></div></div>
     </div>
+  </div>
+
+  <!-- ── 🎫 Members ── -->
+  <div class="screen" id="scMember">
+    <div class="wrap">
+      <div class="page-title">🎫 สมาชิก Old Days</div>
+      <div class="page-sub" id="memRulesTxt">ซื้อครบ 5 แก้ว ฟรี 1 แก้ว · อายุสมาชิก 6 เดือน</div>
+      <div class="mem-grid">
+      <div class="col">
+        <div class="search"><span class="ic">🔍</span><input type="text" id="memSearch" placeholder="ค้นชื่อ / เบอร์โทร / รหัสสมาชิก" oninput="renderMemberList()" autocomplete="off" /></div>
+        <div class="chips" id="memFilters" style="margin-bottom:12px;"></div>
+        <div id="memList"><div class="sk" style="height:120px"></div></div>
+      </div>
+      <div class="col">
+        <div class="tiles" id="memTiles"></div>
+        <div id="memSync" style="margin-top:12px;"></div>
+        <div class="sec-h" style="margin-top:14px"><h2>🕯️ สต๊อกเทียนหอม</h2><span class="tag" id="candleTag"></span></div>
+        <div class="card" id="candleBox"><div class="sk" style="height:70px"></div></div>
+        <div class="sec-h"><h2>🏆 สมาชิกประจำ</h2><span class="tag">แก้วสะสมสูงสุด</span></div>
+        <div class="card" id="memTop"></div>
+        <div class="card hidden" id="memImportCard">
+          <div class="b brown">📥 นำเข้ารายชื่อจาก LMWN</div>
+          <p class="muted small" style="margin:4px 0 8px;line-height:1.55;">export รายชื่อสมาชิกจากหลังร้าน LMWN เป็น Excel แล้วก๊อปมาวางได้เลย บรรทัดละคน
+            <b>ชื่อ · เบอร์ · วันที่สมัคร · แก้วสะสม</b> (คั่นด้วย tab/จุลภาค ลำดับไม่ต้องเป๊ะ ระบบเดาให้) — เบอร์ซ้ำจะข้ามให้เอง</p>
+          <textarea id="memImportText" placeholder="สมชาย ใจดี	0812345678	15/09/2569	3" oninput="previewMemberImport()"></textarea>
+          <div id="memImportPreview" class="muted small" style="margin-top:6px;"></div>
+          <button class="btn ghost" id="btnMemImport" onclick="doMemberImport(this)" disabled>นำเข้า</button>
+        </div>
+      </div>
+      </div>
+    </div>
+    <button class="fab" id="fabMember" onclick="openMemberForm('new')">＋ สมัครสมาชิก</button>
   </div>
 
   <div class="nav" id="bottomNav"></div>
@@ -625,6 +724,48 @@
   </div>
 </div>
 
+<div class="sheet-bg" id="shMember" onclick="if(event.target===this)closeSheet('shMember')">
+  <div class="sheet">
+    <div class="grab"></div>
+    <div class="sheet-h"><h3>🎫 ข้อมูลสมาชิก</h3><button class="x" onclick="closeSheet('shMember')">✕</button></div>
+    <div id="memBody"></div>
+  </div>
+</div>
+
+<div class="sheet-bg" id="shMemForm" onclick="if(event.target===this)closeSheet('shMemForm')">
+  <div class="sheet">
+    <div class="grab"></div>
+    <div class="sheet-h"><h3 id="mfTitle">🎫 สมัครสมาชิก</h3><button class="x" onclick="closeSheet('shMemForm')">✕</button></div>
+    <div id="mfBody"></div>
+  </div>
+</div>
+
+<div class="sheet-bg" id="shMemEdit" onclick="if(event.target===this)closeSheet('shMemEdit')">
+  <div class="sheet">
+    <div class="grab"></div>
+    <div class="sheet-h"><h3>✏️ แก้ไขข้อมูลสมาชิก</h3><button class="x" onclick="closeSheet('shMemEdit')">✕</button></div>
+    <div id="meBody"></div>
+  </div>
+</div>
+
+<div class="sheet-bg" id="shCandle" onclick="if(event.target===this)closeSheet('shCandle')">
+  <div class="sheet">
+    <div class="grab"></div>
+    <div class="sheet-h"><h3 id="cdTitle">🕯️ เทียนหอม</h3><button class="x" onclick="closeSheet('shCandle')">✕</button></div>
+    <div class="muted small" id="cdInfo"></div>
+    <div class="seg" style="margin-top:12px;">
+      <button data-cd="in" class="on" onclick="pickCandleMove(this)">📥 รับเข้า</button>
+      <button data-cd="out" onclick="pickCandleMove(this)">📤 ตัดออก</button>
+      <button data-cd="count" onclick="pickCandleMove(this)">🔢 นับสต๊อก</button>
+    </div>
+    <label class="fl" id="cdQtyLabel">จำนวนที่รับเข้า</label>
+    <input type="number" id="cdQty" class="bigqty" inputmode="numeric" placeholder="0" />
+    <label class="fl">หมายเหตุ</label>
+    <input type="text" id="cdNote" placeholder="เช่น ของมาใหม่ / ชำรุด / แจกลูกค้า VIP" />
+    <button class="btn" onclick="submitCandle(this)">บันทึก</button>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -713,9 +854,10 @@ function parseNote(r) {
   const bills = note.match(/ลูกค้า (\d+) คน \/ (\d+) บิล/);
   const drawer = note.match(/ลิ้นชัก: คาด ([\d,.-]+) จริง ([\d,.-]+) \(([^)]+)\)/);
   const ch = note.match(/ช่องทาง: เงินสด (\d+) \/ โอน (\d+) \/ ไทยช่วยไทย (\d+) ครั้ง/);
-  const rest = note.replace(/ลูกค้า \d+ คน \/ \d+ บิล/, '').replace(/ลิ้นชัก:[^|]*/, '').replace(/ช่องทาง:[^|]*/, '')
+  const mf = note.match(/สมาชิกแลกฟรี (\d+) แก้ว/);
+  const rest = note.replace(/ลูกค้า \d+ คน \/ \d+ บิล/, '').replace(/ลิ้นชัก:[^|]*/, '').replace(/ช่องทาง:[^|]*/, '').replace(/สมาชิกแลกฟรี \d+ แก้ว/, '')
     .split('|').map(x => x.trim()).filter(Boolean).join(' · ');
-  return { guests: bills ? num(bills[1]) : 0, bills: bills ? num(bills[2]) : 0, drawer, rest,
+  return { guests: bills ? num(bills[1]) : 0, bills: bills ? num(bills[2]) : 0, drawer, rest, memberFree: mf ? num(mf[1]) : 0,
     ch: ch ? { cash: num(ch[1]), transfer: num(ch[2]), tct: num(ch[3]) } : null };
 }
 
@@ -824,6 +966,7 @@ async function submitRegister() {
 // ══════════════════════════════════════════
 const TABS = [
   { id: 'home', ico: '🏠', label: 'หน้าแรก', screen: 'scHome' },
+  { id: 'member', ico: '🎫', label: 'สมาชิก', screen: 'scMember' },
   { id: 'report', ico: '📊', label: 'รายงาน', screen: 'scReport' },
   { id: 'stock', ico: '📦', label: 'สต๊อก', screen: 'scStock' },
   { id: 'purchase', ico: '🛒', label: 'เบิกซื้อ', screen: 'scPurchase' },
@@ -849,11 +992,13 @@ function showTab(tab) {
   document.querySelectorAll('#bottomNav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   $('fabStock').classList.toggle('show', tab === 'stock');
   $('fabPo').classList.toggle('show', tab === 'purchase');
+  $('fabMember').classList.toggle('show', tab === 'member');
   if (tab === 'home') loadHome();
   if (tab === 'report') loadReport();
   if (tab === 'stock') loadStock();
   if (tab === 'purchase') loadPurchases();
   if (tab === 'com') loadCom();
+  if (tab === 'member') loadMembers();
 }
 function refreshTab() {
   Object.keys(monthCache).forEach(k => delete monthCache[k]);
@@ -908,6 +1053,8 @@ async function loadHome() {
     $('alertLowList').innerHTML = low.map(i =>
       '<span class="chip sm" style="border-color:#EBB8B0;color:var(--red);background:#fff">' + ingredientEmoji(i.Name) + ' ' + esc(i.Name) + ' <b>' + num(i.Current_Stock) + ' ' + esc(i.Unit) + '</b></span>').join('');
   }).catch(() => {});
+
+  loadHomeMembers();
 
   // เบิกซื้อรออนุมัติ (manager+)
   if (isMgr()) {
@@ -1026,6 +1173,7 @@ function dayBodyHTML(r, compact) {
   html += '<div class="divider"></div>' +
     (n.bills ? '<div class="kv"><span class="k">👥 ลูกค้า / บิล</span><span class="v">' + n.guests + ' คน · ' + n.bills + ' บิล' + (cm ? '' : ' · เฉลี่ย ' + money0(num(r.Total_Sales) / n.bills) + ' ฿') + '</span></div>' : '') +
     '<div class="kv"><span class="k">🏷️ ส่วนลด</span><span class="v">' + num(r.Discount_Count) + ' ครั้ง' + (cm ? '' : ' · ' + money(r.Discount_Total) + ' ฿') + '</span></div>' +
+    (n.memberFree ? '<div class="kv"><span class="k">🎁 สมาชิกแลกแก้วฟรี (POS)</span><span class="v">' + n.memberFree + ' แก้ว</span></div>' : '') +
     (num(r.Void_Count) ? '<div class="kv"><span class="k">🗑️ บิล Void</span><span class="v">' + num(r.Void_Count) + ' บิล' + (cm ? '' : ' · ' + money(r.Void_Total) + ' ฿') + '</span></div>' : '') +
     (!cm && num(r.Cash_Over) ? '<div class="kv"><span class="k">💵 เงินสดเกิน/ขาด</span><span class="v">' + money(r.Cash_Over) + ' ฿</span></div>' : '') +
     (!cm && n.drawer ? '<div class="kv"><span class="k">🗄️ ลิ้นชักเงินสด</span><span class="v">คาด ' + n.drawer[1] + ' → นับ ' + n.drawer[2] +
@@ -1774,6 +1922,530 @@ async function importFromGmail(btn) {
 async function resendSummary() {
   try { await api({ action: 'resendSummary', date: $('resendDate').value }); showToast('ส่งเข้ากลุ่มแล้ว ✓'); }
   catch (e) { showToast(e.message, 4000); }
+}
+
+// ══════════════════════════════════════════
+//  🎫 สมาชิก (คู่กับโปรสมาชิกใน LMWN POS)
+// ══════════════════════════════════════════
+let memData = null;          // ผลจาก getMembers
+let memFilter = 'all';
+let curMember = null;        // ผลจาก getMember (สมาชิกที่เปิดอยู่)
+let memQty = 1;
+let mf = null;               // สถานะฟอร์มสมัคร/ต่ออายุ
+let cdScent = null, cdMove = 'in';
+let memImportRows = [];
+const MEM_FILTERS = [['all', 'ทั้งหมด'], ['gift', '🎁 มีแก้วฟรี'], ['expiring', '⏳ ใกล้หมดอายุ'], ['expired', '⛔ หมดอายุ']];
+const PAY_TH = { cash: '💵 เงินสด', transfer: '📲 โอน', pos: '🧾 จ่ายใน POS แล้ว', none: '— ไม่เก็บ' };
+
+function fmtPhone(p) {
+  const d = String(p || '').replace(/[^0-9]/g, '');
+  return d.length === 10 ? d.slice(0, 3) + '-' + d.slice(3, 6) + '-' + d.slice(6) : (d.length === 9 ? d.slice(0, 2) + '-' + d.slice(2, 5) + '-' + d.slice(5) : d);
+}
+function scentOf(id) { return ((memData && memData.candles) || (curMember && curMember.candles) || []).find(c => c.id === id); }
+function scentShort(c) { return String(c.name || '').replace(/^กลิ่น/, ''); }
+function memDisplayName(m) { return m.nickname ? m.name + ' (' + m.nickname + ')' : m.name; }
+function dotsHTML(p, n) { let h = '<span class="dots">'; for (let i = 0; i < n; i++) h += '<i' + (i < p ? ' class="on"' : '') + '></i>'; return h + '</span>'; }
+function expBadge(m) {
+  if (m.status === 'cancelled') return '<span class="exp bad">ยกเลิกแล้ว</span>';
+  if (m.status === 'expired') return '<span class="exp bad">หมดอายุ ' + thaiDateShort(m.expiresAt) + '</span>';
+  if (m.status === 'expiring') return '<span class="exp warn">อีก ' + m.daysLeft + ' วันหมดอายุ</span>';
+  return '<span class="exp ok">ถึง ' + thaiDateShort(m.expiresAt) + '</span>';
+}
+function memTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso); if (isNaN(d)) return '';
+  return d.getDate() + ' ' + TH_MONTHS_S[d.getMonth()] + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+
+// ── โหลด + หน้ารวม ──
+async function loadMembers() {
+  try {
+    memData = await api({ action: 'getMembers' });
+    renderMembersPage();
+  } catch (e) {
+    $('memList').innerHTML = '<div class="card">' + emptyHTML('😵', 'โหลดสมาชิกไม่สำเร็จ<br>' + esc(e.message)) + '</div>';
+  }
+}
+
+function renderMembersPage() {
+  const d = memData, st = d.stats, R = d.rules;
+  $('memRulesTxt').textContent = 'ซื้อครบ ' + R.stamps + ' แก้ว ฟรี 1 แก้ว · ค่าสมาชิก ' + R.fee + ' ฿ รับเทียนหอม 1 ชิ้น · อายุ ' + R.months + ' เดือน';
+  let tiles =
+    '<div class="tile gold"><div class="ic">👥</div><div class="v">' + st.active + '<small>คน</small></div><div class="k">สมาชิกที่ใช้งานได้</div></div>' +
+    '<div class="tile"><div class="ic">🆕</div><div class="v">' + st.newThisMonth + '<small>คน</small></div><div class="k">สมัครใหม่เดือนนี้</div></div>' +
+    '<div class="tile"><div class="ic">🎁</div><div class="v">' + st.rewardsWaiting + '<small>แก้ว</small></div><div class="k">แก้วฟรีรอแลก</div></div>' +
+    '<div class="tile"><div class="ic">⏳</div><div class="v">' + st.expiring + '<small>คน</small></div><div class="k">หมดอายุใน 30 วัน</div></div>';
+  if (!cupsMode() && st.feesThisMonth != null) {
+    tiles += '<div class="tile"><div class="ic">💰</div><div class="v">' + money0(st.feesThisMonth) + '<small>฿</small></div><div class="k">ค่าสมาชิกเดือนนี้</div></div>' +
+      '<div class="tile"><div class="ic">☕</div><div class="v">' + st.cupsThisMonth + '<small>แก้ว</small></div><div class="k">สมาชิกซื้อเดือนนี้</div></div>';
+  }
+  $('memTiles').innerHTML = tiles;
+  $('memFilters').innerHTML = MEM_FILTERS.map(f => {
+    const c = f[0] === 'gift' ? d.members.filter(m => m.available > 0 && m.status !== 'expired' && m.status !== 'cancelled').length
+      : f[0] === 'expiring' ? st.expiring : f[0] === 'expired' ? st.expired : d.members.length;
+    return '<div class="chip sm' + (memFilter === f[0] ? ' on' : '') + '" onclick="memFilter=\'' + f[0] + '\';renderMembersPage()">' + f[1] + ' <b>' + c + '</b></div>';
+  }).join('');
+  renderMemberList();
+  renderCandles();
+  renderMemTop();
+  renderMemSync();
+  $('memImportCard').classList.toggle('hidden', !isMgr());
+}
+
+function memMatch(m, q) {
+  if (!q) return true;
+  q = q.toLowerCase().trim();
+  const qd = q.replace(/[^0-9]/g, '');
+  return m.name.toLowerCase().includes(q) || m.nickname.toLowerCase().includes(q) || m.id.toLowerCase().includes(q) ||
+    (qd.length >= 3 && m.phone.includes(qd));
+}
+
+function renderMemberList() {
+  if (!memData) return;
+  const q = $('memSearch').value;
+  const order = { active: 0, expiring: 0, expired: 1, cancelled: 2 };
+  const list = memData.members.filter(m => memMatch(m, q)).filter(m =>
+    memFilter === 'gift' ? m.available > 0 && (m.status === 'active' || m.status === 'expiring')
+      : memFilter === 'expiring' ? m.status === 'expiring'
+      : memFilter === 'expired' ? m.status === 'expired' || m.status === 'cancelled' : true
+  ).sort((a, b) => (order[a.status] - order[b.status]) || (b.available - a.available) ||
+    String(b.lastVisit || b.joinedAt).localeCompare(String(a.lastVisit || a.joinedAt)));
+  if (!memData.members.length) {
+    $('memList').innerHTML = '<div class="card">' + emptyHTML('🎫', 'ยังไม่มีสมาชิก<br>กดปุ่ม <b>＋ สมัครสมาชิก</b> ด้านล่างได้เลย') + '</div>';
+    return;
+  }
+  if (!list.length) {
+    $('memList').innerHTML = '<div class="card">' + emptyHTML('🔍', 'ไม่เจอสมาชิกที่ค้นหา' + (q ? '<br><button class="btn sm gold" style="margin-top:10px" onclick="openMemberForm(\'new\',$(\'memSearch\').value)">＋ สมัครให้ "' + esc(q) + '"</button>' : '')) + '</div>';
+    return;
+  }
+  const dead = s => s === 'expired' || s === 'cancelled';
+  $('memList').innerHTML = list.slice(0, 120).map(m => {
+    const sc = scentOf(m.scent);
+    return '<div class="mem' + (dead(m.status) ? ' off' : '') + '" onclick="openMember(\'' + safeId(m.id) + '\')">' +
+      '<div class="av">' + esc(initial(m.nickname || m.name)) + '</div>' +
+      '<div class="main"><div class="n">' + esc(memDisplayName(m)) + '</div>' +
+      '<div class="s">' + esc(m.id) + (m.phone ? ' · ' + fmtPhone(m.phone) : '') + (sc ? ' · ' + sc.emoji : '') + (m.source === 'lmwn' ? ' · LMWN' : '') + '</div></div>' +
+      '<div class="right">' + (m.available > 0 && !dead(m.status) ? '<span class="gift">🎁 ฟรี ' + m.available + '</span>' : dotsHTML(m.progress, m.stampsPer)) + expBadge(m) + '</div></div>';
+  }).join('') + (list.length > 120 ? '<div class="muted small" style="text-align:center">แสดง 120 จาก ' + list.length + ' คน — พิมพ์ค้นหาเพื่อกรอง</div>' : '');
+}
+
+function renderCandles() {
+  const cs = memData.candles || [];
+  const total = cs.reduce((s, c) => s + c.stock, 0);
+  $('candleTag').textContent = 'คงเหลือ ' + total + ' ชิ้น';
+  const max = Math.max(1, ...cs.map(c => c.stock));
+  $('candleBox').innerHTML = cs.length ? '<div class="candles">' + cs.map(c =>
+    '<div class="candle' + (c.stock <= c.min ? ' low' : '') + '" onclick="openCandle(\'' + safeId(c.id) + '\')">' +
+    '<div class="em">' + c.emoji + '</div><div class="nm">' + esc(scentShort(c)) + '</div><div class="q">' + c.stock + ' ชิ้น</div>' +
+    '<div class="bar"><i style="width:' + Math.max(3, c.stock / max * 100) + '%"></i></div></div>').join('') + '</div>' +
+    (cs.some(c => c.stock <= c.min) ? '<div class="small red" style="margin-top:8px">⚠️ ' + cs.filter(c => c.stock <= c.min).map(c => scentShort(c) + ' เหลือ ' + c.stock).join(' · ') + ' — สั่งเพิ่มได้แล้ว</div>' : '') +
+    '<div class="muted small" style="margin-top:6px">แตะกลิ่นเพื่อรับเข้า · ตัดออก · นับสต๊อก</div>'
+    : emptyHTML('🕯️', 'ยังไม่มีข้อมูลเทียน (วางโค้ด GAS ล่าสุดแล้วโหลดใหม่)');
+}
+
+function renderMemTop() {
+  const top = memData.members.filter(m => m.paidCups > 0).sort((a, b) => b.paidCups - a.paidCups).slice(0, 5);
+  $('memTop').innerHTML = top.length ? top.map((m, i) =>
+    '<div class="rank" onclick="openMember(\'' + safeId(m.id) + '\')"><div class="no">' + ['🥇', '🥈', '🥉', '4', '5'][i] + '</div>' +
+    '<div><div class="b" style="font-size:14px">' + esc(memDisplayName(m)) + '</div><div class="muted small">มา ' + m.visits + ' ครั้ง' +
+    (m.lastVisit ? ' · ล่าสุด ' + thaiDateShort(m.lastVisit) : '') + '</div></div>' +
+    '<div class="b brown">' + m.paidCups + ' แก้ว</div></div>').join('')
+    : '<div class="muted small">ยังไม่มีการสะสมแก้ว</div>';
+}
+
+// เทียบแก้วฟรีที่แลกเดือนนี้: POS (จากอีเมลปิดรอบ) vs บันทึกในแอป — ช่วยจับการลืมกดฝั่งใดฝั่งหนึ่ง
+async function renderMemSync() {
+  const box = $('memSync');
+  try {
+    const days = await monthDays(thisMonthISO());
+    const pos = days.reduce((s, r) => s + parseNote(r).memberFree, 0);
+    const app = memData.stats.redeemedThisMonth;
+    if (!pos && !app) { box.innerHTML = ''; return; }
+    let msg, cls = 'ok';
+    if (pos === app) msg = '✅ ตรงกัน — แก้วฟรีที่แลกใน POS กับในแอปเท่ากัน';
+    else if (pos > app) { cls = 'warn'; msg = '⚠️ POS แลกไป ' + (pos - app) + ' แก้ว ที่ยังไม่ได้กดแลกในแอป — เปิดสมาชิกคนนั้นแล้วกด 🎁 แลกแก้วฟรี'; }
+    else { cls = 'warn'; msg = '⚠️ แอปบันทึกแลกมากกว่า POS ' + (app - pos) + ' แก้ว — อาจลืมกดโปรสมาชิกใน POS ตอนคิดเงิน'; }
+    box.innerHTML = '<div class="card tight" style="' + (cls === 'warn' ? 'border-color:#E8CF98;background:#FFFBF2' : '') + '">' +
+      '<div class="sec-h" style="margin:0 0 4px"><h2 style="font-size:14px">🔄 เทียบกับ POS (LMWN) เดือนนี้</h2></div>' +
+      '<div class="kv"><span class="k">🎁 แก้วฟรีที่แลกใน POS</span><span class="v">' + pos + ' แก้ว</span></div>' +
+      '<div class="kv"><span class="k">🎫 บันทึกแลกในแอป</span><span class="v">' + app + ' แก้ว</span></div>' +
+      '<div class="small" style="margin-top:4px;color:' + (cls === 'ok' ? 'var(--green)' : '#7A5417') + '">' + msg + '</div></div>';
+  } catch (e) { box.innerHTML = ''; }
+}
+
+// ── การ์ดสมาชิกบนหน้าแรก ──
+async function loadHomeMembers() {
+  try {
+    const d = await api({ action: 'getMembers' });
+    memData = d;
+    const st = d.stats;
+    if (!d.members.length) { $('homeMem').classList.add('hidden'); return; }
+    const low = (d.candles || []).filter(c => c.stock <= c.min);
+    $('homeMem').innerHTML = '<div class="sec-h" style="margin:0 0 6px"><h2 style="font-size:14.5px">🎫 สมาชิก</h2><span class="act">ดูทั้งหมด ›</span></div>' +
+      '<div class="tiles c3">' +
+      '<div class="tile" style="box-shadow:none"><div class="v">' + st.active + '</div><div class="k">ใช้งานได้</div></div>' +
+      '<div class="tile" style="box-shadow:none"><div class="v">' + st.rewardsWaiting + '</div><div class="k">🎁 แก้วฟรีรอแลก</div></div>' +
+      '<div class="tile" style="box-shadow:none"><div class="v">' + st.expiring + '</div><div class="k">⏳ ใกล้หมดอายุ</div></div></div>' +
+      (low.length ? '<div class="small red" style="margin-top:8px">🕯️ เทียนใกล้หมด: ' + low.map(c => scentShort(c) + ' ' + c.stock).join(' · ') + '</div>' : '');
+    $('homeMem').classList.remove('hidden');
+  } catch (e) { $('homeMem').classList.add('hidden'); }
+}
+
+// ── รายละเอียดสมาชิก ──
+async function openMember(id) {
+  $('memBody').innerHTML = '<div class="sk" style="height:180px;margin-bottom:12px"></div><div class="sk" style="height:120px"></div>';
+  openSheet('shMember');
+  memQty = 1;
+  try {
+    const m = memData && memData.members.find(x => safeId(x.id) === id);
+    curMember = await api({ action: 'getMember', memberId: m ? m.id : id });
+    renderMemberSheet();
+  } catch (e) { $('memBody').innerHTML = emptyHTML('😵', esc(e.message)); }
+}
+
+function renderMemberSheet(popIdx) {
+  const d = curMember, m = d.member, sc = (d.candles || []).find(c => c.id === m.scent);
+  const dead = m.status === 'expired' || m.status === 'cancelled';
+  let h = '<div class="mcard' + (dead ? ' dead' : '') + '">' +
+    '<div class="brand"><span>OLD DAYS · MEMBER</span><span>' + (m.source === 'lmwn' ? 'LMWN' : '☕') + '</span></div>' +
+    '<div class="nm">' + esc(memDisplayName(m)) + '</div>' +
+    '<div class="id">' + esc(m.id) + (m.phone ? ' · ' + fmtPhone(m.phone) : '') + '</div>' +
+    '<div class="foot"><div><div class="k">' + (m.status === 'cancelled' ? 'สถานะ' : (m.status === 'expired' ? 'หมดอายุเมื่อ' : 'สมาชิกถึง')) + '</div>' +
+    '<div class="v">' + (m.status === 'cancelled' ? 'ยกเลิกแล้ว' : thaiDate(m.expiresAt) + (m.status !== 'expired' ? ' · อีก ' + m.daysLeft + ' วัน' : '')) + '</div></div>' +
+    (sc ? '<span class="chipc">' + sc.emoji + ' เทียน' + esc(scentShort(sc)) + '</span>' : '') + '</div></div>';
+
+  if (dead) {
+    h += '<div class="card tight" style="border-color:#EBB8B0;background:#FFF6F4">' +
+      '<div class="b red">' + (m.status === 'cancelled' ? '🚫 สมาชิกนี้ถูกยกเลิกแล้ว' : '⛔ หมดอายุแล้ว — ต่ออายุเพื่อสะสมและแลกต่อ') + '</div>' +
+      (m.available ? '<div class="small muted" style="margin-top:2px">มีแก้วฟรีค้างอยู่ ' + m.available + ' แก้ว (ใช้ได้หลังต่ออายุ)</div>' : '') +
+      (m.status === 'expired' ? '<button class="btn gold" onclick="openMemberForm(\'renew\')">🔄 ต่ออายุสมาชิก (' + d.rules.fee + ' ฿ + เทียนหอม)</button>' : '') + '</div>';
+  }
+
+  // บัตรสะสมแต้ม
+  let stamps = '';
+  for (let i = 0; i < m.stampsPer; i++) {
+    stamps += '<div class="stamp' + (i < m.progress ? ' on' : '') + (popIdx != null && i < m.progress && i >= popIdx ? ' pop' : '') + '">' + (i < m.progress ? '☕' : (i + 1)) + '</div>';
+  }
+  h += '<div class="card"><div class="sec-h" style="margin:0"><h2 style="font-size:15px">☕ บัตรสะสม</h2><span class="tag">' + m.progress + '/' + m.stampsPer +
+    ' · อีก ' + (m.stampsPer - m.progress) + ' แก้วได้ฟรี</span></div><div class="stamps">' + stamps + '</div>';
+  if (m.available > 0) {
+    h += '<div class="reward"><div class="big">🎁</div><div class="main"><div class="t">มีแก้วฟรีรอแลก ' + m.available + ' แก้ว</div>' +
+      '<div class="s">เมนูไหนก็ได้ · กดแลกแล้วอย่าลืมกดโปรสมาชิกใน POS ด้วย</div></div>' +
+      (dead ? '' : '<button class="btn sm" onclick="memRedeem(this)">แลกเลย</button>') + '</div>';
+  }
+  if (!dead) {
+    h += '<label class="fl">บันทึกแก้วที่ซื้อ (ไม่รวมแก้วฟรี)</label>' +
+      '<div class="qty-step"><button onclick="memStep(-1)">−</button><input type="number" id="memQtyIn" class="bigqty" inputmode="numeric" value="' + memQty + '" oninput="memQty=Math.max(1,Math.floor(num(this.value)));$(\'btnMemAdd\').textContent=\'☕ บันทึก +\'+memQty+\' แก้ว\'" />' +
+      '<button onclick="memStep(1)">＋</button></div>' +
+      '<button class="btn" id="btnMemAdd" onclick="memAddCups(this)">☕ บันทึก +' + memQty + ' แก้ว</button>';
+  }
+  h += '</div>';
+
+  // สรุปตัวเลข
+  h += '<div class="card"><div class="tiles c3" style="margin-bottom:6px">' +
+    '<div class="tile" style="box-shadow:none"><div class="v">' + m.paidCups + '</div><div class="k">แก้วที่ซื้อ</div></div>' +
+    '<div class="tile" style="box-shadow:none"><div class="v">' + m.redeemed + '</div><div class="k">แลกฟรีแล้ว</div></div>' +
+    '<div class="tile" style="box-shadow:none"><div class="v">' + m.visits + '</div><div class="k">มาร้าน (ครั้ง)</div></div></div>' +
+    '<div class="kv"><span class="k">📅 สมัครเมื่อ</span><span class="v">' + thaiDate(m.joinedAt) + (m.source === 'lmwn' ? ' · ผ่าน LMWN' : ' · ที่ร้าน') + '</span></div>' +
+    (m.lastVisit ? '<div class="kv"><span class="k">🕐 มาล่าสุด</span><span class="v">' + thaiDate(m.lastVisit) + '</span></div>' : '') +
+    (!cupsMode() && m.fees != null ? '<div class="kv"><span class="k">💰 ค่าสมาชิกที่จ่ายแล้ว</span><span class="v">' + money0(m.fees) + ' ฿' + (d.member.payMethod ? ' · ' + (PAY_TH[d.member.payMethod] || d.member.payMethod) : '') + '</span></div>' : '') +
+    (m.lmwnRef ? '<div class="kv"><span class="k">🔗 รหัส LMWN</span><span class="v">' + esc(m.lmwnRef) + '</span></div>' : '') +
+    (m.note ? '<div class="kv"><span class="k">📝 หมายเหตุ</span><span class="v">' + esc(m.note) + '</span></div>' : '') +
+    '<div class="btn-row">' +
+    (m.status === 'expiring' ? '<button class="btn sm gold" onclick="openMemberForm(\'renew\')">🔄 ต่ออายุล่วงหน้า</button>' : '') +
+    (isMgr() ? '<button class="btn sm ghost" onclick="openMemEdit()">✏️ แก้ไข / ปรับแต้ม</button>' : '') + '</div></div>';
+
+  // ประวัติการซื้อ
+  const T = {
+    join: ['🎫', 'สมัครสมาชิก'], renew: ['🔄', 'ต่ออายุสมาชิก'], buy: ['☕', 'ซื้อ'], redeem: ['🎁', 'แลกแก้วฟรี 1 แก้ว'], adjust: ['✏️', 'ปรับแต้ม'],
+  };
+  h += '<div class="sec-h"><h2>🧾 ประวัติการซื้อ</h2><span class="tag">' + d.history.length + ' รายการ</span></div><div class="card">';
+  h += d.history.length ? '<div class="tl">' + d.history.map(l => {
+    const t = T[l.type] || ['·', l.type];
+    const sc2 = l.scent ? (d.candles || []).find(c => c.id === l.scent) : null;
+    const title = l.type === 'buy' ? 'ซื้อ ' + l.cups + ' แก้ว' : l.type === 'adjust' ? 'ปรับแต้ม ' + (l.cups > 0 ? '+' : '') + l.cups + ' แก้ว' : t[1];
+    return '<div class="it' + (l.type === 'redeem' ? ' count' : '') + '"><div class="t"><span>' + t[0] + ' ' + title + '</span>' +
+      (l.canUndo ? '<button class="btn sm ghost" style="padding:3px 10px;font-size:12px" onclick="memUndo(\'' + safeId(l.id) + '\',this)">↩︎ ยกเลิก</button>' : '') + '</div>' +
+      '<div class="s">' + memTime(l.at) + (l.by ? ' · ' + esc(nickOf(l.by)) : '') + (sc2 ? ' · ' + sc2.emoji + ' เทียน' + esc(scentShort(sc2)) : '') +
+      (l.amount ? ' · ' + money0(l.amount) + ' ฿' : '') + (l.note ? ' · ' + esc(l.note) : '') + '</div></div>';
+  }).join('') + '</div>' : '<div class="muted small">ยังไม่มีประวัติ</div>';
+  h += '</div>';
+  $('memBody').innerHTML = h;
+}
+
+function memStep(n) {
+  memQty = Math.max(1, Math.min(30, memQty + n));
+  $('memQtyIn').value = memQty;
+  $('btnMemAdd').textContent = '☕ บันทึก +' + memQty + ' แก้ว';
+}
+
+// หลังเขียนสำเร็จ: อัปเดตแถวสมาชิกในลิสต์ให้ตรงทันที ไม่ต้องโหลดทั้งหน้า
+function memPatchList(m) {
+  if (!memData) return;
+  const i = memData.members.findIndex(x => x.id === m.id);
+  if (i >= 0) memData.members[i] = Object.assign({}, memData.members[i], m); else memData.members.unshift(m);
+}
+async function memRefreshDetail() {
+  curMember = await api({ action: 'getMember', memberId: curMember.member.id });
+}
+
+async function memAddCups(btn) {
+  const before = curMember.member.progress;
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+  try {
+    const r = await api({ action: 'addMemberCups', memberId: curMember.member.id, cups: memQty });
+    memPatchList(r.member);
+    await memRefreshDetail();
+    const pop = r.newRewards > 0 ? 0 : before;
+    memQty = 1;
+    renderMemberSheet(pop);
+    showToast(r.newRewards > 0 ? '🎉 ครบ ' + r.member.stampsPer + ' แก้ว! ได้แก้วฟรี ' + r.newRewards + ' แก้ว' : '☕ สะสมแล้ว ' + r.member.progress + '/' + r.member.stampsPer, 3500);
+    if (memData) renderMembersPage();
+  } catch (e) { showToast(e.message, 4500); btn.disabled = false; btn.textContent = '☕ บันทึก +' + memQty + ' แก้ว'; }
+}
+
+async function memRedeem(btn) {
+  if (btn.dataset.armed !== '1') {
+    btn.dataset.armed = '1'; btn.textContent = 'แตะอีกครั้งยืนยัน';
+    setTimeout(() => { btn.dataset.armed = ''; btn.textContent = 'แลกเลย'; }, 3500);
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const r = await api({ action: 'redeemMember', memberId: curMember.member.id });
+    memPatchList(r.member);
+    await memRefreshDetail();
+    renderMemberSheet();
+    showToast('🎁 แลกแก้วฟรีแล้ว — อย่าลืมกดโปรสมาชิกใน POS ด้วยนะ', 4500);
+    if (memData) renderMembersPage();
+  } catch (e) { showToast(e.message, 4500); btn.disabled = false; }
+}
+
+async function memUndo(logId, btn) {
+  if (btn.dataset.armed !== '1') {
+    btn.dataset.armed = '1'; btn.textContent = 'แน่ใจ?';
+    setTimeout(() => { btn.dataset.armed = ''; btn.textContent = '↩︎ ยกเลิก'; }, 3500);
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const l = curMember.history.find(x => safeId(x.id) === logId);
+    const r = await api({ action: 'undoMemberLog', logId: l ? l.id : logId });
+    memPatchList(r.member);
+    await memRefreshDetail();
+    renderMemberSheet();
+    showToast('↩︎ ยกเลิกรายการแล้ว แต้มคำนวณใหม่ให้เรียบร้อย');
+    if (memData) renderMembersPage();
+  } catch (e) { showToast(e.message, 4500); btn.disabled = false; }
+}
+
+// ── ฟอร์มสมัคร / ต่ออายุ ──
+function openMemberForm(mode, prefill) {
+  const cands = (memData && memData.candles) || (curMember && curMember.candles) || [];
+  const firstInStock = cands.find(c => c.stock > 0);
+  mf = { mode, scent: firstInStock ? firstInStock.id : 'none', pay: 'cash', source: 'shop' };
+  if (mode === 'renew') closeSheet('shMember');
+  $('mfBody').innerHTML = '';   // ล้างค่าที่พิมพ์ค้างจากฟอร์มครั้งก่อน
+  renderMemForm(prefill);
+  openSheet('shMemForm');
+}
+
+function renderMemForm(prefill) {
+  const R = (memData && memData.rules) || (curMember && curMember.rules) || { fee: 100, months: 6, stamps: 5 };
+  const cands = (memData && memData.candles) || (curMember && curMember.candles) || [];
+  const renew = mf.mode === 'renew';
+  $('mfTitle').textContent = renew ? '🔄 ต่ออายุสมาชิก' : '🎫 สมัครสมาชิกใหม่';
+  let h = '';
+  if (renew) {
+    const m = curMember.member;
+    const base = m.expiresAt && m.expiresAt >= todayISO() ? m.expiresAt : todayISO();
+    h += '<div class="card tight"><div class="b">' + esc(memDisplayName(m)) + ' <span class="muted small">' + esc(m.id) + '</span></div>' +
+      '<div class="kv"><span class="k">หมดอายุเดิม</span><span class="v">' + thaiDate(m.expiresAt) + '</span></div>' +
+      '<div class="kv"><span class="k">ต่อแล้วใช้ได้ถึง</span><span class="v green">' + thaiDate(addMonthsISO(base, R.months)) + '</span></div>' +
+      '<div class="muted small">' + (m.expiresAt >= todayISO() ? 'ต่อก่อนหมด = นับต่อจากวันหมดอายุเดิม ไม่เสียวันที่เหลือ' : 'หมดอายุแล้ว = นับ ' + R.months + ' เดือนใหม่จากวันนี้') + ' · แก้วสะสมเดิมยังอยู่ครบ</div></div>';
+  } else {
+    h += '<div class="seg" style="margin-bottom:4px">' +
+      '<button class="' + (mf.source === 'shop' ? 'on' : '') + '" onclick="mf.source=\'shop\';renderMemForm()">🏪 สมัครที่ร้าน</button>' +
+      '<button class="' + (mf.source === 'lmwn' ? 'on' : '') + '" onclick="mf.source=\'lmwn\';renderMemForm()">📲 ย้ายจาก LMWN</button></div>' +
+      '<label class="fl">ชื่อ-นามสกุล *</label><input type="text" id="mfName" placeholder="ชื่อลูกค้า" value="' + esc(mfVal('mfName', /^[0-9\s-]+$/.test(prefill || '') ? '' : prefill)) + '" />' +
+      '<div class="row2"><div><label class="fl">ชื่อเล่น</label><input type="text" id="mfNick" placeholder="เช่น แพร" value="' + esc(mfVal('mfNick')) + '" /></div>' +
+      '<div><label class="fl">เบอร์โทร</label><input type="tel" id="mfPhone" inputmode="tel" placeholder="08x-xxx-xxxx" value="' + esc(mfVal('mfPhone', /^[0-9\s-]+$/.test(prefill || '') ? prefill : '')) + '" /></div></div>' +
+      '<div class="muted small" style="margin-top:4px">💡 ใช้เบอร์เดียวกับที่สมัครใน LMWN จะค้นหาเจอง่าย</div>' +
+      '<label class="fl">วันที่สมัคร</label><input type="date" id="mfDate" max="' + todayISO() + '" value="' + esc(mfVal('mfDate', todayISO())) + '" oninput="$(\'mfExp\').textContent=thaiDate(addMonthsISO(this.value||todayISO(),' + R.months + '))" />' +
+      '<div class="muted small" style="margin-top:4px">หมดอายุ <b class="brown" id="mfExp">' + thaiDate(addMonthsISO(mfVal('mfDate', todayISO()), R.months)) + '</b> (' + R.months + ' เดือน)</div>';
+    if (mf.source === 'lmwn') {
+      h += '<div class="row2"><div><label class="fl">แก้วสะสมยกมา</label><input type="number" id="mfCarry" inputmode="numeric" placeholder="0" value="' + esc(mfVal('mfCarry')) + '" /></div>' +
+        '<div><label class="fl">รหัสสมาชิก LMWN</label><input type="text" id="mfRef" placeholder="ถ้ามี" value="' + esc(mfVal('mfRef')) + '" /></div></div>';
+    }
+  }
+  h += '<label class="fl">🕯️ เลือกกลิ่นเทียนหอม</label><div class="candles">' + cands.map(c =>
+    '<div class="candle' + (mf.scent === c.id ? ' on' : '') + (c.stock < 1 ? ' out' : '') + (c.stock <= c.min ? ' low' : '') + '" onclick="mf.scent=\'' + safeId(c.id) + '\';renderMemForm()">' +
+    '<div class="em">' + c.emoji + '</div><div class="nm">' + esc(scentShort(c)) + '</div><div class="q">' + (c.stock < 1 ? 'หมด' : 'เหลือ ' + c.stock) + '</div></div>').join('') + '</div>' +
+    '<div class="chips" style="margin-top:8px"><div class="chip sm' + (mf.scent === 'none' ? ' on' : '') + '" onclick="mf.scent=\'none\';renderMemForm()">ไม่รับเทียน / รับไปแล้ว</div></div>';
+  h += '<label class="fl">💳 ค่าสมาชิก ' + R.fee + ' บาท</label><div class="chips">' + ['cash', 'transfer', 'pos', 'none'].map(p =>
+    '<div class="chip sm' + (mf.pay === p ? ' on' : '') + '" onclick="mf.pay=\'' + p + '\';renderMemForm()">' + PAY_TH[p] + '</div>').join('') + '</div>';
+  h += '<label class="fl">หมายเหตุ</label><input type="text" id="mfNote" placeholder="ถ้ามี" value="' + esc(mfVal('mfNote')) + '" />';
+  const sc = cands.find(c => c.id === mf.scent);
+  h += '<button class="btn gold" id="btnMf" onclick="submitMemberForm(this)">' + (renew ? '🔄 ต่ออายุ' : '✅ สมัครสมาชิก') +
+    (sc ? ' + แจกเทียน' + esc(scentShort(sc)) : '') + '</button>';
+  $('mfBody').innerHTML = h;
+}
+// อ่านค่าที่พิมพ์ค้างไว้ก่อน re-render (เปลี่ยนกลิ่น/ช่องทางจ่ายแล้วข้อความไม่หาย)
+function mfVal(id, dflt) { const el = $(id); return el ? el.value : (dflt || ''); }
+
+// ต้องตรงกับ addMonthsISO ฝั่ง GAS — ปลายเดือนตัดให้พอดี
+function addMonthsISO(iso, n) {
+  const p = String(iso).slice(0, 10).split('-').map(Number);
+  let y = p[0], m = p[1] - 1 + n; const d = p[2];
+  y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return y + '-' + pad2(m + 1) + '-' + pad2(Math.min(d, last));
+}
+
+async function submitMemberForm(btn) {
+  const renew = mf.mode === 'renew';
+  const body = renew
+    ? { action: 'renewMember', memberId: curMember.member.id, scentId: mf.scent, payMethod: mf.pay }
+    : { action: 'createMember', name: $('mfName').value.trim(), nickname: $('mfNick').value.trim(), phone: $('mfPhone').value.trim(),
+        joinedAt: $('mfDate').value, scentId: mf.scent, payMethod: mf.pay, source: mf.source,
+        initialCups: mf.source === 'lmwn' && $('mfCarry') ? num($('mfCarry').value) : 0,
+        lmwnRef: mf.source === 'lmwn' && $('mfRef') ? $('mfRef').value.trim() : '' };
+  if (!renew && !body.name) { showToast('กรอกชื่อสมาชิกก่อน'); return; }
+  body.note = $('mfNote') ? $('mfNote').value.trim() : '';
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+  try {
+    const r = await api(body);
+    const m = r.member;
+    const sc = ((memData && memData.candles) || (curMember && curMember.candles) || []).find(c => c.id === mf.scent);
+    $('mfBody').innerHTML = '<div class="ok-hero"><div class="em">🎉</div><div class="page-title" style="font-size:19px">' +
+      (renew ? 'ต่ออายุเรียบร้อย' : 'ยินดีต้อนรับสมาชิกใหม่') + '</div></div>' +
+      '<div class="mcard" style="margin-top:12px"><div class="brand"><span>OLD DAYS · MEMBER</span><span>☕</span></div>' +
+      '<div class="nm">' + esc(memDisplayName(m)) + '</div><div class="id">' + esc(m.id) + (m.phone ? ' · ' + fmtPhone(m.phone) : '') + '</div>' +
+      '<div class="foot"><div><div class="k">สมาชิกถึง</div><div class="v">' + thaiDate(m.expiresAt) + '</div></div>' +
+      (sc ? '<span class="chipc">' + sc.emoji + ' เทียน' + esc(scentShort(sc)) + '</span>' : '') + '</div></div>' +
+      (sc ? '<div class="card tight" style="text-align:center">🕯️ อย่าลืมหยิบ <b>เทียน' + esc(scentShort(sc)) + '</b> ให้ลูกค้านะ</div>' : '') +
+      (!renew ? '<div class="card tight small muted" style="line-height:1.6">📲 สมัครใน LMWN POS ด้วยเบอร์เดียวกัน เพื่อให้โปร "ซื้อ 5 ฟรี 1" ขึ้นตอนคิดเงิน</div>' : '') +
+      '<button class="btn" onclick="closeSheet(\'shMemForm\');openMember(\'' + safeId(m.id) + '\')">เปิดบัตรสมาชิก ›</button>' +
+      '<button class="btn ghost" onclick="closeSheet(\'shMemForm\')">เสร็จ</button>';
+    loadMembers();
+  } catch (e) { showToast(e.message, 5000); btn.disabled = false; renderMemForm(); }
+}
+
+// ── แก้ไข (ผู้บริหาร) ──
+function openMemEdit() {
+  const m = curMember.member;
+  $('meBody').innerHTML =
+    '<label class="fl">ชื่อ-นามสกุล</label><input type="text" id="meName" value="' + esc(m.name) + '" />' +
+    '<div class="row2"><div><label class="fl">ชื่อเล่น</label><input type="text" id="meNick" value="' + esc(m.nickname) + '" /></div>' +
+    '<div><label class="fl">เบอร์โทร</label><input type="tel" id="mePhone" value="' + esc(m.phone) + '" /></div></div>' +
+    '<label class="fl">วันหมดอายุ</label><input type="date" id="meExp" value="' + esc(m.expiresAt) + '" />' +
+    '<label class="fl">หมายเหตุ</label><input type="text" id="meNote" value="' + esc(m.note) + '" />' +
+    '<div class="divider"></div><div class="b brown" style="font-size:14px">✏️ ปรับแต้มสะสม</div>' +
+    '<div class="muted small" style="margin:2px 0 4px">ใส่ + เพิ่ม / − ลด (เช่น ลืมบันทึก หรือยอดยกมาจาก LMWN) — ตอนนี้ ' + m.paidCups + ' แก้ว</div>' +
+    '<div class="row2"><div><input type="number" id="meAdj" inputmode="numeric" placeholder="0" /></div><div><input type="text" id="meAdjNote" placeholder="เหตุผล" /></div></div>' +
+    '<button class="btn" onclick="saveMemEdit(this)">บันทึก</button>' +
+    (m.status === 'cancelled'
+      ? '<button class="btn ghost" onclick="saveMemEdit(this,\'active\')">↩︎ เปิดใช้งานสมาชิกอีกครั้ง</button>'
+      : '<button class="btn ghost" style="color:var(--red)" onclick="saveMemEdit(this,\'cancelled\')">🚫 ยกเลิกสมาชิกคนนี้</button>');
+  openSheet('shMemEdit');
+}
+async function saveMemEdit(btn, status) {
+  if (status === 'cancelled' && btn.dataset.armed !== '1') {
+    btn.dataset.armed = '1'; btn.textContent = 'แน่ใจ? แตะอีกครั้งเพื่อยกเลิกสมาชิก';
+    setTimeout(() => { btn.dataset.armed = ''; btn.textContent = '🚫 ยกเลิกสมาชิกคนนี้'; }, 3500);
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const body = { action: 'updateMember', memberId: curMember.member.id, name: $('meName').value, nickname: $('meNick').value,
+      phone: $('mePhone').value, expiresAt: $('meExp').value, note: $('meNote').value,
+      adjustCups: num($('meAdj').value), adjustNote: $('meAdjNote').value.trim() };
+    if (status) body.status = status;
+    const r = await api(body);
+    memPatchList(r.member);
+    closeSheet('shMemEdit');
+    await memRefreshDetail();
+    renderMemberSheet();
+    showToast(status === 'cancelled' ? 'ยกเลิกสมาชิกแล้ว' : status === 'active' ? 'เปิดใช้งานอีกครั้งแล้ว' : 'บันทึกแล้ว ✓');
+    if (memData) renderMembersPage();
+  } catch (e) { showToast(e.message, 4500); btn.disabled = false; }
+}
+
+// ── สต๊อกเทียน ──
+function openCandle(sid) {
+  const c = (memData.candles || []).find(x => safeId(x.id) === sid); if (!c) return;
+  cdScent = c; cdMove = 'in';
+  $('cdTitle').textContent = c.emoji + ' เทียน' + scentShort(c);
+  $('cdInfo').textContent = 'คงเหลือ ' + c.stock + ' ชิ้น · เตือนเมื่อเหลือ ≤ ' + c.min;
+  document.querySelectorAll('#shCandle .seg button').forEach(b => b.classList.toggle('on', b.dataset.cd === 'in'));
+  $('cdQtyLabel').textContent = 'จำนวนที่รับเข้า';
+  $('cdQty').value = ''; $('cdNote').value = '';
+  openSheet('shCandle');
+}
+function pickCandleMove(el) {
+  cdMove = el.dataset.cd;
+  document.querySelectorAll('#shCandle .seg button').forEach(b => b.classList.toggle('on', b === el));
+  $('cdQtyLabel').textContent = cdMove === 'in' ? 'จำนวนที่รับเข้า' : cdMove === 'out' ? 'จำนวนที่ตัดออก' : 'นับได้ทั้งหมด (ทับของเดิม)';
+}
+async function submitCandle(btn) {
+  if ($('cdQty').value.trim() === '') { showToast('กรอกจำนวนก่อน'); return; }
+  btn.disabled = true;
+  try {
+    const r = await api({ action: 'adjustCandle', scentId: cdScent.id, type: cdMove, qty: num($('cdQty').value), note: $('cdNote').value.trim() });
+    memData.candles = r.candles;
+    closeSheet('shCandle');
+    renderCandles();
+    const c = r.candles.find(x => x.id === cdScent.id);
+    showToast('🕯️ บันทึกแล้ว · เทียน' + scentShort(c) + ' เหลือ ' + c.stock + ' ชิ้น');
+  } catch (e) { showToast(e.message, 4500); }
+  btn.disabled = false;
+}
+
+// ── นำเข้าจาก LMWN (วางข้อความจาก Excel) ──
+// เดาคอลัมน์เอง: เบอร์ = ตัวเลข 9–12 หลักขึ้นต้น 0/+ · วันที่ = d/m/y หรือ y-m-d (รองรับ พ.ศ.) · เลขสั้น = แก้วสะสม · ที่เหลือ = ชื่อ
+function parseMemberImport(text) {
+  const rows = [];
+  String(text || '').split(/\r?\n/).forEach(line => {
+    const cells = line.split(/\t|,|;|\|/).map(x => x.trim()).filter(Boolean);
+    if (!cells.length) return;
+    let name = '', phone = '', joinedAt = '', cups = 0;
+    cells.forEach(c => {
+      const digits = c.replace(/[^0-9]/g, '');
+      if (!phone && /^[0+][\d\s-]+$/.test(c) && digits.length >= 9 && digits.length <= 12) { phone = digits.replace(/^66/, '0'); return; }
+      const dm = c.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+      const im = c.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (!joinedAt && (dm || im)) {
+        let y = Number(dm ? dm[3] : im[1]); const mo = Number(dm ? dm[2] : im[2]), d = Number(dm ? dm[1] : im[3]);
+        if (y < 100) y = y >= 43 ? y + 2500 : y + 2000;
+        if (y > 2400) y -= 543;
+        if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) joinedAt = y + '-' + pad2(mo) + '-' + pad2(d);
+        return;
+      }
+      if (/^\d{1,3}$/.test(c)) { cups = Number(c); return; }
+      if (!name) name = c;
+    });
+    if (!phone && /^(ชื่อ|name|ลำดับ|no\.?)$/i.test(name)) return;   // แถวหัวตาราง
+    if (name) rows.push({ name, phone, joinedAt, cups });
+  });
+  return rows;
+}
+function previewMemberImport() {
+  memImportRows = parseMemberImport($('memImportText').value);
+  const n = memImportRows.length;
+  $('btnMemImport').disabled = !n;
+  $('btnMemImport').textContent = n ? '📥 นำเข้า ' + n + ' คน' : 'นำเข้า';
+  $('memImportPreview').innerHTML = n ? 'อ่านได้ ' + n + ' คน · ตัวอย่าง: ' + memImportRows.slice(0, 3).map(r =>
+    '<b>' + esc(r.name) + '</b>' + (r.phone ? ' ' + fmtPhone(r.phone) : '') + (r.joinedAt ? ' · ' + thaiDateShort(r.joinedAt) : '') + (r.cups ? ' · ' + r.cups + ' แก้ว' : '')).join(' / ') : '';
+}
+async function doMemberImport(btn) {
+  if (!memImportRows.length) return;
+  btn.disabled = true; btn.textContent = 'กำลังนำเข้า...';
+  try {
+    const r = await api({ action: 'importMembers', rows: memImportRows });
+    showToast('📥 นำเข้าแล้ว ' + r.added + ' คน' + (r.skipped.length ? ' · ข้าม ' + r.skipped.length + ' (' + r.skipped.slice(0, 3).join(', ') + ')' : ''), 6000);
+    $('memImportText').value = ''; previewMemberImport();
+    loadMembers();
+  } catch (e) { showToast(e.message, 5000); btn.disabled = false; btn.textContent = '📥 นำเข้า ' + memImportRows.length + ' คน'; }
 }
 
 init();

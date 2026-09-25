@@ -29,6 +29,10 @@ var SHEET_TABS = {
   STAFF_PAY: 'StaffPay',
   COM_PAY: 'CommissionPay',
   STOCK_CHECKS: 'StockChecks',
+  MEMBERS: 'Members',
+  MEMBER_LOG: 'MemberLog',
+  CANDLES: 'Candles',
+  CANDLE_LOG: 'CandleLog',
 };
 
 // ชื่อผู้ส่งของ record ที่ดึงจากอีเมล POS อัตโนมัติ — แอปใช้แยกว่ายังรอคนยืนยัน
@@ -58,7 +62,22 @@ var HEADERS = {
   StaffPay: ['Staff_Name', 'PromptPay', 'Note'],
   CommissionPay: ['Date', 'Staff_Name', 'Amount', 'Status', 'Paid_At', 'Paid_By', 'Note'],
   StockChecks: ['Date', 'Checked_By', 'Checked_At', 'Note'],
+  // 🎫 ระบบสมาชิก (ซื้อครบ 5 แก้ว ฟรี 1 · ค่าสมาชิก 100 ฿ + เทียนหอม · อายุ 6 เดือน)
+  Members: ['Member_ID', 'Name', 'Nickname', 'Phone', 'Joined_At', 'Expires_At', 'Candle_Scent',
+    'Fee', 'Pay_Method', 'Source', 'LMWN_Ref', 'Status', 'Note', 'Created_By', 'Created_At'],
+  MemberLog: ['Log_ID', 'Timestamp', 'Member_ID', 'Type', 'Cups', 'Amount', 'Scent_ID', 'Note', 'By'],
+  Candles: ['Scent_ID', 'Name', 'Emoji', 'Stock', 'Min_Stock', 'Sort_Order', 'Active'],
+  CandleLog: ['Timestamp', 'Scent_ID', 'Scent_Name', 'Type', 'Qty', 'Balance_After', 'Member_ID', 'Note', 'By'],
 };
+
+// เทียนหอมแถมสมาชิก — [id, ชื่อ, emoji, สต๊อกเริ่มต้น, เตือนเมื่อเหลือ ≤, ลำดับ]
+var SEED_CANDLES = [
+  ['coffee', 'กลิ่นกาแฟ', '☕', 150, 15, 1],
+  ['jasmine-tea', 'กลิ่นชามะลิ', '🌼', 100, 10, 2],
+  ['lavender', 'กลิ่นลาเวนเดอร์', '💜', 75, 10, 3],
+  ['mango', 'กลิ่นมะม่วง', '🥭', 100, 10, 4],
+  ['strawberry', 'กลิ่นสตรอเบอรี่', '🍓', 75, 10, 5],
+];
 
 var SEED_CATEGORIES = [
   // [id, name, emoji, unit, countCommission, sort]
@@ -120,6 +139,9 @@ var WRITE_ACTIONS = {
   deleteStockMove: 1, createPurchase: 1, updatePurchase: 1, saveMenuItem: 1,
   importFromGmail: 1, assignCommission: 1, payCommission: 1, payAllCommission: 1, saveStaffPay: 1,
   unpayCommission: 1, disableIngredient: 1, setCategoryCommission: 1, markStockChecked: 1,
+  setStaffRole: 1, saveShift: 1,
+  createMember: 1, addMemberCups: 1, redeemMember: 1, renewMember: 1, updateMember: 1,
+  undoMemberLog: 1, adjustCandle: 1, importMembers: 1,
 };
 
 function handleRequest(e) {
@@ -182,6 +204,18 @@ function route(action, req) {
     case 'getStaffAdmin':      return actionGetStaffAdmin(req);
     case 'setStaffRole':       return actionSetStaffRole(req);
 
+    // 🎫 สมาชิก
+    case 'getMembers':       return actionGetMembers(req);
+    case 'getMember':        return actionGetMember(req);
+    case 'createMember':     return actionCreateMember(req);
+    case 'addMemberCups':    return actionAddMemberCups(req);
+    case 'redeemMember':     return actionRedeemMember(req);
+    case 'renewMember':      return actionRenewMember(req);
+    case 'updateMember':     return actionUpdateMember(req);
+    case 'undoMemberLog':    return actionUndoMemberLog(req);
+    case 'adjustCandle':     return actionAdjustCandle(req);
+    case 'importMembers':    return actionImportMembers(req);
+
     // ── สต๊อก ──
     case 'getStock':         return actionGetStock(req);
     case 'addIngredient':    return actionAddIngredient(req);
@@ -238,6 +272,10 @@ function seedSheet(name, sheet) {
     });
   } else if (name === SHEET_TABS.CONFIG) {
     SEED_CONFIG.forEach(function (c) { sheet.appendRow(c); });
+  } else if (name === SHEET_TABS.CANDLES) {
+    SEED_CANDLES.forEach(function (c) {
+      sheet.appendRow([c[0], c[1], c[2], c[3], c[4], c[5], true]);
+    });
   }
 }
 
@@ -1065,6 +1103,8 @@ function buildDailyFlex(record, categories, premiumItems, config) {
   if (guests) opsRows.push(kvRow('👥 ลูกค้า', guests[1] + ' คน / ' + guests[2] + ' บิล', C));
   if (num(record.Discount_Count)) opsRows.push(kvRow('🏷️ ส่วนลด', num(record.Discount_Count) + ' รายการ', C));
   if (num(record.Void_Count)) opsRows.push(kvRow('🗑️ บิล Void', num(record.Void_Count) + ' บิล', C));
+  var memFree = String(record.Note || '').match(/สมาชิกแลกฟรี (\d+) แก้ว/);
+  if (memFree) opsRows.push(kvRow('🎁 สมาชิกแลกฟรี', memFree[1] + ' แก้ว', C));
   if (opsRows.length) {
     body = body.concat([{ type: 'separator', margin: 'lg', color: '#4A3826' }], opsRows);
   }
@@ -1607,15 +1647,10 @@ function parseDrawerReport(text) {
     pendName = line.replace(/\|/g, '').trim();
   }
 
-  // ส่วนลดมีได้หลายบรรทัด: Sub.TTL DC.(%) และ Sub.TTL DC.(Amt) — ต้องรวมทุกบรรทัด
-  // (บั๊กเดิมอ่านแค่บรรทัดแรก เช่น 17/8 ได้ 271.25 ทั้งที่จริง 921.25)
-  var discount = [0, 0];
-  lines.forEach(function (l) {
-    if (l.indexOf('Sub.TTL DC') === -1) return;
-    var d = lastTwoNums(l);
-    discount[0] += Math.abs(d[0]);
-    discount[1] += Math.abs(d[1]);
-  });
+  // ส่วนลด = ทุกบรรทัดในหมวด "Discount & Promotions" (จนถึง Payments) — มีทั้ง Sub.TTL DC.(%)/(Amt)
+  // และโปรสมาชิก "ซื้อ5แก้ว ฟรี1แก้ว" (บั๊กเดิมนับแค่ Sub.TTL DC → 23/9 ส่วนลดสมาชิก 55 บาทหาย)
+  var promo = parsePromotions(lines);
+  var discount = [promo.count, promo.amount];
   var tctLine = findLine('ไทยช่วยไทย') || findLine('By Custom Payment');
   var voidAll = lastTwoNums(findLine('Void All'));
 
@@ -1640,8 +1675,45 @@ function parseDrawerReport(text) {
     drawerExpected: lastNum(findLine('Expected in Drawer')),
     drawerActual: lastNum(findLine('Actual in Drawer')),
     drawerDiff: lastNum(findLine('Difference')),
+    memberFreeCups: promo.memberCount,
+    memberFreeValue: promo.memberAmount,
     categories: categories,
   };
+}
+
+/**
+ * อ่านหมวด "Discount & Promotions" ทั้งหมด → รวมส่วนลด + แยกยอดโปรสมาชิก
+ * บรรทัดเช่น "| โปรโมชั่นสำหรับสมาชิกซื้อ5แก้ว ฟรี1แก้ว | 1 | -55.00 |" → ตัวเลข 2 ตัวท้าย = ครั้ง, ยอด
+ * (ตัวเลขในชื่อโปร เช่น 5, 1 ไม่กระทบเพราะหยิบ 2 ตัวท้ายเสมอ)
+ */
+function parsePromotions(lines) {
+  var out = { count: 0, amount: 0, memberCount: 0, memberAmount: 0 };
+  var start = -1;
+  for (var i = 0; i < lines.length; i++) {
+    if (lines[i].indexOf('Discount & Promotions') !== -1) { start = i + 1; break; }
+  }
+  var take = function (l) {
+    var d = lastTwoNums(l);
+    if (!d[1]) return;
+    out.count += Math.abs(d[0]);
+    out.amount += Math.abs(d[1]);
+    if (/สมาชิก|member/i.test(l)) {
+      out.memberCount += Math.abs(d[0]);
+      out.memberAmount += Math.abs(d[1]);
+    }
+  };
+  if (start >= 0) {
+    for (var j = start; j < lines.length; j++) {
+      if (/Payments|By Cash|Total Revenue/.test(lines[j])) break;
+      if (lines[j]) take(lines[j]);
+    }
+  } else {
+    // รายงานรูปแบบเก่าที่ไม่มีหัวหมวด — ใช้วิธีเดิม
+    lines.forEach(function (l) { if (l.indexOf('Sub.TTL DC') !== -1) take(l); });
+  }
+  out.amount = Math.round(out.amount * 100) / 100;
+  out.memberAmount = Math.round(out.memberAmount * 100) / 100;
+  return out;
 }
 
 /** จับชื่อหมวดจากอีเมลเข้ากับ Category_ID ในระบบ (ตัด emoji/ช่องว่าง เทียบแบบหลวม) */
@@ -1707,6 +1779,9 @@ function saveImportedClose(parsed) {
   // จำนวนครั้งต่อช่องทาง — หน้าแอปโหมดพนักงานอ่านจาก Note (ไม่เพิ่มคอลัมน์ กันชีตเก่าพัง)
   noteExtra.push('ช่องทาง: เงินสด ' + num(parsed.cashCount) + ' / โอน ' + (num(parsed.qrCount) + num(parsed.creditCount)) +
     ' / ไทยช่วยไทย ' + num(parsed.tctCount) + ' ครั้ง');
+  if (num(parsed.memberFreeCups) > 0) {
+    noteExtra.push('สมาชิกแลกฟรี ' + num(parsed.memberFreeCups) + ' แก้ว');
+  }
   if (parsed.drawerDiff !== 0) {
     noteExtra.push('ลิ้นชัก: คาด ' + fmtMoney(parsed.drawerExpected) + ' จริง ' +
       fmtMoney(parsed.drawerActual) + ' (' + (parsed.drawerDiff > 0 ? '+' : '') + fmtMoney(parsed.drawerDiff) + ')');
@@ -1871,4 +1946,399 @@ function seedHistoricalCloses() {
           + (skipped.length ? ' | ข้าม (มีอยู่แล้ว): ' + skipped.join(', ') : '');
   Logger.log(msg);
   return msg;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  🎫 ระบบสมาชิก Old Days (คู่กับโปรสมาชิกใน LMWN POS)
+//
+//  กติกา: ค่าสมาชิก 100 ฿ → รับเทียนหอม 1 ชิ้น (เลือกกลิ่น) · อายุ 6 เดือนนับจากวันสมัคร
+//         ซื้อครบ 5 แก้ว ฟรี 1 แก้ว (เมนูไหนก็ได้) — แก้วฟรีไม่นับเป็นแต้ม
+//  ปรับตัวเลขได้ในแท็บ Config: MEMBER_FEE / MEMBER_MONTHS / MEMBER_STAMPS
+//
+//  ข้อมูลแต้ม "คำนวณจากสมุดบันทึก" (MemberLog) ทุกครั้ง ไม่เก็บตัวเลขสำเร็จรูป
+//  → ลบรายการที่กดผิด = แต้มถูกต้องเองทันที ไม่มีวันเพี้ยน
+// ═══════════════════════════════════════════════════════════════
+
+function memberRules() {
+  var c = getConfig();
+  return {
+    fee: num(c.MEMBER_FEE || 100),
+    months: num(c.MEMBER_MONTHS || 6),
+    stamps: num(c.MEMBER_STAMPS || 5),
+  };
+}
+
+/** บวกเดือนให้วันที่ 'yyyy-MM-dd' — ปลายเดือนตัดให้พอดี (31 ส.ค. + 6 = 28/29 ก.พ.) */
+function addMonthsISO(iso, n) {
+  var p = String(iso).slice(0, 10).split('-').map(Number);
+  var y = p[0], m = p[1] - 1 + n, d = p[2];
+  y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+  var last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return y + '-' + ('0' + (m + 1)).slice(-2) + '-' + ('0' + Math.min(d, last)).slice(-2);
+}
+
+/** จำนวนวันจาก a ถึง b ('yyyy-MM-dd') — ติดลบถ้า b อยู่ก่อน a */
+function daysBetweenISO(a, b) {
+  var pa = String(a).split('-').map(Number), pb = String(b).split('-').map(Number);
+  return Math.round((Date.UTC(pb[0], pb[1] - 1, pb[2]) - Date.UTC(pa[0], pa[1] - 1, pa[2])) / 86400000);
+}
+
+function todayKey() { return dateKey(new Date()); }
+function isoTime(v) { var d = new Date(v); return isNaN(d.getTime()) ? '' : d.toISOString(); }
+function normPhone(v) { return String(v || '').replace(/[^0-9]/g, ''); }
+
+/**
+ * สรุปสถานะสมาชิกหนึ่งคนจากสมุดบันทึก (pure — เทสได้)
+ * buy = แก้วที่จ่ายเงิน (ได้แต้ม) · redeem = แลกแก้วฟรี · adjust = ปรับแต้มมือ/ยอดยกมา (+/-)
+ */
+function summarizeMember(m, logs, rules, today) {
+  var paid = 0, redeemed = 0, visits = 0, fees = 0, last = '';
+  (logs || []).forEach(function (l) {
+    var t = String(l.Type);
+    var ts = l.Timestamp ? dateKey(l.Timestamp) : '';
+    if (t === 'buy') { paid += num(l.Cups); visits++; }
+    else if (t === 'redeem') { redeemed += num(l.Cups) || 1; visits++; }
+    else if (t === 'adjust') { paid += num(l.Cups); }
+    else if (t === 'join' || t === 'renew') { fees += num(l.Amount); }
+    if ((t === 'buy' || t === 'redeem') && ts > last) last = ts;
+  });
+  paid = Math.max(0, paid);
+  var n = rules.stamps || 5;
+  var earned = Math.floor(paid / n);
+  var expires = dateKey(m.Expires_At);
+  var daysLeft = expires ? daysBetweenISO(today, expires) : 0;
+  var status = String(m.Status || 'active') === 'cancelled' ? 'cancelled'
+    : (daysLeft < 0 ? 'expired' : (daysLeft <= 30 ? 'expiring' : 'active'));
+  return {
+    id: String(m.Member_ID), name: String(m.Name || ''), nickname: String(m.Nickname || ''),
+    phone: String(m.Phone || ''), joinedAt: dateKey(m.Joined_At), expiresAt: expires,
+    daysLeft: daysLeft, status: status, scent: String(m.Candle_Scent || ''),
+    source: String(m.Source || 'shop'), lmwnRef: String(m.LMWN_Ref || ''), note: String(m.Note || ''),
+    paidCups: paid, redeemed: redeemed, earned: earned,
+    available: Math.max(0, earned - redeemed), progress: paid % n, stampsPer: n,
+    visits: visits, lastVisit: last, fees: fees,
+  };
+}
+
+function memberLogsById() {
+  var by = {};
+  readRows(SHEET_TABS.MEMBER_LOG).forEach(function (l) {
+    var k = String(l.Member_ID);
+    (by[k] = by[k] || []).push(l);
+  });
+  return by;
+}
+
+function findMemberRow(id) {
+  var rows = readRows(SHEET_TABS.MEMBERS);
+  for (var i = 0; i < rows.length; i++) if (String(rows[i].Member_ID) === String(id)) return rows[i];
+  return null;
+}
+
+function nextMemberId() {
+  var max = 0;
+  readRows(SHEET_TABS.MEMBERS).forEach(function (r) {
+    var m = String(r.Member_ID).match(/^M(\d+)$/);
+    if (m) max = Math.max(max, Number(m[1]));
+  });
+  return 'M' + ('000' + (max + 1)).slice(-4);
+}
+
+function logMember(memberId, type, cups, amount, scentId, note, by) {
+  var id = 'L' + Date.now() + Math.floor(Math.random() * 1000);
+  appendRowObj(SHEET_TABS.MEMBER_LOG, {
+    Log_ID: id, Timestamp: new Date(), Member_ID: memberId, Type: type,
+    Cups: num(cups), Amount: num(amount), Scent_ID: scentId || '', Note: note || '', By: by || '',
+  });
+  return id;
+}
+
+/** แจกเทียน 1 ชิ้น: ตัดสต๊อก + จดสมุดเทียน — กลิ่นหมดสต๊อก = error ให้เลือกกลิ่นอื่น */
+function giveCandle(scentId, memberId, by, note) {
+  if (!scentId || scentId === 'none') return null;
+  var rows = readRows(SHEET_TABS.CANDLES);
+  var c = null;
+  for (var i = 0; i < rows.length; i++) if (String(rows[i].Scent_ID) === String(scentId)) { c = rows[i]; break; }
+  if (!c || !isTrue(c.Active)) throw new Error('ไม่พบกลิ่นเทียนนี้');
+  var bal = num(c.Stock);
+  if (bal < 1) throw new Error('เทียน' + c.Name + ' หมดสต๊อกแล้ว — เลือกกลิ่นอื่นนะ');
+  var idx = c._rowIndex; delete c._rowIndex;
+  c.Stock = bal - 1;
+  updateRowObj(SHEET_TABS.CANDLES, idx, c);
+  appendRowObj(SHEET_TABS.CANDLE_LOG, {
+    Timestamp: new Date(), Scent_ID: scentId, Scent_Name: c.Name, Type: 'give', Qty: 1,
+    Balance_After: c.Stock, Member_ID: memberId || '', Note: note || '', By: by || '',
+  });
+  return c;
+}
+
+function candleList() {
+  return readRows(SHEET_TABS.CANDLES)
+    .filter(function (c) { return isTrue(c.Active); })
+    .sort(function (a, b) { return num(a.Sort_Order) - num(b.Sort_Order); })
+    .map(function (c) {
+      return { id: String(c.Scent_ID), name: String(c.Name), emoji: String(c.Emoji || '🕯️'),
+        stock: num(c.Stock), min: num(c.Min_Stock) };
+    });
+}
+
+// ── อ่าน ──────────────────────────────────────────────────────
+
+function actionGetMembers(req) {
+  var staff = requireStaff(req);
+  var canMoney = (ROLE_LEVEL[staff.Role] || 0) >= ROLE_LEVEL.manager;
+  var rules = memberRules();
+  var today = todayKey();
+  var month = today.slice(0, 7);
+  var logsBy = memberLogsById();
+
+  var members = readRows(SHEET_TABS.MEMBERS).map(function (m) {
+    var s = summarizeMember(m, logsBy[String(m.Member_ID)], rules, today);
+    if (!canMoney) delete s.fees;
+    return s;
+  });
+
+  var stats = { active: 0, expiring: 0, expired: 0, newThisMonth: 0, rewardsWaiting: 0,
+    redeemedThisMonth: 0, cupsThisMonth: 0 };
+  if (canMoney) stats.feesThisMonth = 0;
+  members.forEach(function (m) {
+    if (m.status === 'active' || m.status === 'expiring') { stats.active++; stats.rewardsWaiting += m.available; }
+    if (m.status === 'expiring') stats.expiring++;
+    if (m.status === 'expired') stats.expired++;
+    if (m.joinedAt.slice(0, 7) === month) stats.newThisMonth++;
+  });
+  Object.keys(logsBy).forEach(function (k) {
+    logsBy[k].forEach(function (l) {
+      if (dateKey(l.Timestamp).slice(0, 7) !== month) return;
+      if (l.Type === 'redeem') stats.redeemedThisMonth += num(l.Cups) || 1;
+      if (l.Type === 'buy') stats.cupsThisMonth += num(l.Cups);
+      if (canMoney && (l.Type === 'join' || l.Type === 'renew')) stats.feesThisMonth += num(l.Amount);
+    });
+  });
+
+  return { members: members, candles: candleList(), stats: stats, rules: rules, today: today };
+}
+
+function actionGetMember(req) {
+  var staff = requireStaff(req);
+  var isMgr = (ROLE_LEVEL[staff.Role] || 0) >= ROLE_LEVEL.manager;
+  var m = findMemberRow(req.memberId);
+  if (!m) throw new Error('ไม่พบสมาชิก');
+  var logs = memberLogsById()[String(m.Member_ID)] || [];
+  var today = todayKey();
+  var s = summarizeMember(m, logs, memberRules(), today);
+  if (!isMgr) delete s.fees;
+  s.payMethod = String(m.Pay_Method || '');
+  s.createdBy = String(m.Created_By || '');
+  var history = logs.slice().sort(function (a, b) {
+    return new Date(b.Timestamp).getTime() - new Date(a.Timestamp).getTime();
+  }).map(function (l) {
+    var t = String(l.Type);
+    var mine = String(l.By) === String(staff.Name) && dateKey(l.Timestamp) === today;
+    return {
+      id: String(l.Log_ID), at: isoTime(l.Timestamp),
+      type: t, cups: num(l.Cups), amount: isMgr ? num(l.Amount) : undefined,
+      scent: String(l.Scent_ID || ''), note: String(l.Note || ''), by: String(l.By || ''),
+      canUndo: (t === 'buy' || t === 'redeem' || t === 'adjust') && (isMgr || mine),
+    };
+  });
+  return { member: s, history: history, candles: candleList(), rules: memberRules() };
+}
+
+// ── เขียน ─────────────────────────────────────────────────────
+
+function actionCreateMember(req) {
+  var staff = requireStaff(req);
+  var rules = memberRules();
+  var name = String(req.name || '').trim();
+  if (!name) throw new Error('กรอกชื่อสมาชิกก่อน');
+  var phone = normPhone(req.phone);
+  if (phone) {
+    var dup = readRows(SHEET_TABS.MEMBERS).filter(function (r) {
+      return normPhone(r.Phone) === phone && String(r.Status) !== 'cancelled';
+    })[0];
+    if (dup) throw new Error('เบอร์นี้เป็นสมาชิกอยู่แล้ว: ' + dup.Name + ' (' + dup.Member_ID + ') — ถ้าหมดอายุให้กด "ต่ออายุ" แทน');
+  }
+  var joined = /^\d{4}-\d{2}-\d{2}$/.test(String(req.joinedAt || '')) ? String(req.joinedAt) : todayKey();
+  if (joined > todayKey()) throw new Error('วันที่สมัครต้องไม่เป็นวันในอนาคต');
+  var expires = addMonthsISO(joined, rules.months);
+  var source = req.source === 'lmwn' ? 'lmwn' : 'shop';
+  var payMethod = String(req.payMethod || 'cash');
+  var feePaid = payMethod === 'none' ? 0 : rules.fee;
+  var id = nextMemberId();
+
+  // แจกเทียนก่อน — ถ้าหมดสต๊อกจะ error ออกไปก่อนสร้างสมาชิก (ไม่มีข้อมูลครึ่งๆ กลางๆ)
+  var scent = String(req.scentId || 'none');
+  giveCandle(scent, id, staff.Name, 'แถมสมัครสมาชิก');
+
+  appendRowObj(SHEET_TABS.MEMBERS, {
+    Member_ID: id, Name: name, Nickname: String(req.nickname || '').trim(), Phone: phone,
+    Joined_At: joined, Expires_At: expires, Candle_Scent: scent === 'none' ? '' : scent,
+    Fee: feePaid, Pay_Method: payMethod, Source: source, LMWN_Ref: String(req.lmwnRef || '').trim(),
+    Status: 'active', Note: String(req.note || '').trim(), Created_By: staff.Name, Created_At: new Date(),
+  });
+  logMember(id, 'join', 0, feePaid, scent === 'none' ? '' : scent,
+    (source === 'lmwn' ? 'ย้ายจาก LMWN' : 'สมัครที่ร้าน') + (payMethod === 'none' ? ' · ไม่เก็บค่าสมาชิก' : ''), staff.Name);
+
+  var carry = Math.max(0, Math.floor(num(req.initialCups)));
+  if (carry) logMember(id, 'adjust', carry, 0, '', 'แก้วสะสมยกมา' + (source === 'lmwn' ? 'จาก LMWN' : ''), staff.Name);
+
+  var s = summarizeMember(findMemberRow(id), memberLogsById()[id], rules, todayKey());
+  return { member: s };
+}
+
+function requireLiveMember(id) {
+  var m = findMemberRow(id);
+  if (!m) throw new Error('ไม่พบสมาชิก');
+  var s = summarizeMember(m, memberLogsById()[String(id)], memberRules(), todayKey());
+  if (s.status === 'cancelled') throw new Error('สมาชิกนี้ถูกยกเลิกแล้ว');
+  if (s.status === 'expired') throw new Error('สมาชิกหมดอายุแล้ว (' + s.expiresAt + ') — ต่ออายุก่อนถึงจะสะสม/แลกได้');
+  return { row: m, sum: s };
+}
+
+function actionAddMemberCups(req) {
+  var staff = requireStaff(req);
+  var cups = Math.floor(num(req.cups));
+  if (cups < 1 || cups > 30) throw new Error('จำนวนแก้วต้องอยู่ระหว่าง 1–30');
+  var before = requireLiveMember(req.memberId).sum;
+  logMember(before.id, 'buy', cups, 0, '', String(req.note || ''), staff.Name);
+  var after = summarizeMember(findMemberRow(before.id), memberLogsById()[before.id], memberRules(), todayKey());
+  return { member: after, newRewards: after.earned - before.earned };
+}
+
+function actionRedeemMember(req) {
+  var staff = requireStaff(req);
+  var s = requireLiveMember(req.memberId).sum;
+  if (s.available < 1) throw new Error('ยังไม่มีแก้วฟรีให้แลก (สะสม ' + s.progress + '/' + s.stampsPer + ')');
+  logMember(s.id, 'redeem', 1, 0, '', String(req.note || ''), staff.Name);
+  return { member: summarizeMember(findMemberRow(s.id), memberLogsById()[s.id], memberRules(), todayKey()) };
+}
+
+function actionRenewMember(req) {
+  var staff = requireStaff(req);
+  var rules = memberRules();
+  var m = findMemberRow(req.memberId);
+  if (!m) throw new Error('ไม่พบสมาชิก');
+  var today = todayKey();
+  var cur = dateKey(m.Expires_At);
+  // ต่อก่อนหมด = ต่อจากวันหมดอายุเดิม (ไม่เสียวันที่เหลือ) · หมดแล้ว = นับใหม่จากวันนี้
+  var base = cur && cur >= today ? cur : today;
+  var newExp = addMonthsISO(base, rules.months);
+  var payMethod = String(req.payMethod || 'cash');
+  var fee = payMethod === 'none' ? 0 : rules.fee;
+  var scent = String(req.scentId || 'none');
+  giveCandle(scent, m.Member_ID, staff.Name, 'แถมต่ออายุสมาชิก');
+
+  var idx = m._rowIndex; delete m._rowIndex;
+  m.Expires_At = newExp;
+  m.Status = 'active';
+  if (scent !== 'none') m.Candle_Scent = scent;
+  updateRowObj(SHEET_TABS.MEMBERS, idx, m);
+  logMember(m.Member_ID, 'renew', 0, fee, scent === 'none' ? '' : scent,
+    'ต่ออายุถึง ' + newExp + (payMethod === 'none' ? ' · ไม่เก็บค่าสมาชิก' : ''), staff.Name);
+  return { member: summarizeMember(findMemberRow(m.Member_ID), memberLogsById()[String(m.Member_ID)], rules, today) };
+}
+
+/** แก้ข้อมูลสมาชิก / ยกเลิก / เปิดใหม่ / ปรับแต้ม (ผู้บริหารขึ้นไป) */
+function actionUpdateMember(req) {
+  var staff = requireRole(req, 'manager');
+  var m = findMemberRow(req.memberId);
+  if (!m) throw new Error('ไม่พบสมาชิก');
+  var idx = m._rowIndex; delete m._rowIndex;
+  if (req.name !== undefined) {
+    if (!String(req.name).trim()) throw new Error('ชื่อต้องไม่ว่าง');
+    m.Name = String(req.name).trim();
+  }
+  if (req.nickname !== undefined) m.Nickname = String(req.nickname).trim();
+  if (req.phone !== undefined) m.Phone = normPhone(req.phone);
+  if (req.note !== undefined) m.Note = String(req.note).trim();
+  if (req.expiresAt !== undefined) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(req.expiresAt))) throw new Error('วันหมดอายุไม่ถูกต้อง');
+    m.Expires_At = String(req.expiresAt);
+  }
+  if (req.status === 'cancelled' || req.status === 'active') m.Status = req.status;
+  updateRowObj(SHEET_TABS.MEMBERS, idx, m);
+  var adj = Math.round(num(req.adjustCups));
+  if (adj) logMember(m.Member_ID, 'adjust', adj, 0, '', String(req.adjustNote || 'ปรับแต้มโดยผู้บริหาร'), staff.Name);
+  return { member: summarizeMember(findMemberRow(m.Member_ID), memberLogsById()[String(m.Member_ID)], memberRules(), todayKey()) };
+}
+
+/** ยกเลิกรายการที่กดผิด — พนักงานยกเลิกของตัวเองวันนี้ได้ · ผู้บริหารยกเลิกได้ทุกรายการ */
+function actionUndoMemberLog(req) {
+  var staff = requireStaff(req);
+  var isMgr = (ROLE_LEVEL[staff.Role] || 0) >= ROLE_LEVEL.manager;
+  var rows = readRows(SHEET_TABS.MEMBER_LOG);
+  var l = null;
+  for (var i = 0; i < rows.length; i++) if (String(rows[i].Log_ID) === String(req.logId)) { l = rows[i]; break; }
+  if (!l) throw new Error('ไม่พบรายการนี้ (อาจถูกลบไปแล้ว)');
+  var t = String(l.Type);
+  if (['buy', 'redeem', 'adjust'].indexOf(t) === -1) {
+    throw new Error('รายการสมัคร/ต่ออายุ ยกเลิกตรงนี้ไม่ได้ — ให้ผู้บริหารแก้วันหมดอายุหรือยกเลิกสมาชิกแทน');
+  }
+  var mine = String(l.By) === String(staff.Name) && dateKey(l.Timestamp) === todayKey();
+  if (!isMgr && !mine) throw new Error('ยกเลิกได้เฉพาะรายการที่คุณบันทึกเองวันนี้ — รายการอื่นให้ผู้บริหารจัดการ');
+  getSheet(SHEET_TABS.MEMBER_LOG).deleteRow(l._rowIndex);
+  var id = String(l.Member_ID);
+  return { member: summarizeMember(findMemberRow(id), memberLogsById()[id], memberRules(), todayKey()) };
+}
+
+/** รับเทียนเข้า / ตัดออก (เสีย/แจกอื่น) / นับสต๊อก — พนักงานทำได้ (เหมือนสต๊อกวัตถุดิบ) */
+function actionAdjustCandle(req) {
+  var staff = requireStaff(req);
+  var type = String(req.type);
+  if (['in', 'out', 'count'].indexOf(type) === -1) throw new Error('ประเภทรายการไม่ถูกต้อง');
+  var qty = Math.floor(num(req.qty));
+  if (qty < 0 || (type !== 'count' && qty < 1)) throw new Error('กรอกจำนวนให้ถูกต้อง');
+  var rows = readRows(SHEET_TABS.CANDLES);
+  var c = null;
+  for (var i = 0; i < rows.length; i++) if (String(rows[i].Scent_ID) === String(req.scentId)) { c = rows[i]; break; }
+  if (!c) throw new Error('ไม่พบกลิ่นเทียนนี้');
+  var bal = num(c.Stock);
+  var next = type === 'in' ? bal + qty : (type === 'out' ? bal - qty : qty);
+  if (next < 0) throw new Error('ตัดออกเกินสต๊อก (เหลือ ' + bal + ')');
+  var idx = c._rowIndex; delete c._rowIndex;
+  c.Stock = next;
+  updateRowObj(SHEET_TABS.CANDLES, idx, c);
+  appendRowObj(SHEET_TABS.CANDLE_LOG, {
+    Timestamp: new Date(), Scent_ID: c.Scent_ID, Scent_Name: c.Name, Type: type, Qty: qty,
+    Balance_After: next, Member_ID: '', Note: String(req.note || ''), By: staff.Name,
+  });
+  return { candles: candleList() };
+}
+
+/**
+ * นำเข้ารายชื่อสมาชิกจาก LMWN (ผู้บริหารขึ้นไป) — หน้าแอปแกะข้อความที่วางมาเป็นแถวให้แล้ว
+ * rows: [{ name, phone, joinedAt, cups }] · เบอร์ซ้ำกับสมาชิกที่มีอยู่ = ข้าม · ไม่แจกเทียน ไม่เก็บค่าสมาชิกซ้ำ
+ */
+function actionImportMembers(req) {
+  var staff = requireRole(req, 'manager');
+  var rows = Array.isArray(req.rows) ? req.rows : [];
+  if (!rows.length) throw new Error('ไม่มีรายชื่อให้นำเข้า');
+  if (rows.length > 300) throw new Error('นำเข้าได้ครั้งละไม่เกิน 300 คน');
+  var rules = memberRules();
+  var today = todayKey();
+  var have = {};
+  readRows(SHEET_TABS.MEMBERS).forEach(function (r) { if (normPhone(r.Phone)) have[normPhone(r.Phone)] = true; });
+  var added = 0, skipped = [];
+  var seq = Number(nextMemberId().slice(1)); // อ่านชีตครั้งเดียว แล้วนับต่อเอง (300 แถว = ไม่ต้องอ่าน 300 รอบ)
+  rows.forEach(function (r) {
+    var name = String(r.name || '').trim();
+    var phone = normPhone(r.phone);
+    if (!name) { skipped.push('(ไม่มีชื่อ)'); return; }
+    if (phone && have[phone]) { skipped.push(name + ' (เบอร์ซ้ำ)'); return; }
+    var joined = /^\d{4}-\d{2}-\d{2}$/.test(String(r.joinedAt || '')) && String(r.joinedAt) <= today ? String(r.joinedAt) : today;
+    var id = 'M' + ('000' + (seq++)).slice(-4);
+    appendRowObj(SHEET_TABS.MEMBERS, {
+      Member_ID: id, Name: name, Nickname: '', Phone: phone, Joined_At: joined,
+      Expires_At: addMonthsISO(joined, rules.months), Candle_Scent: '', Fee: 0, Pay_Method: 'none',
+      Source: 'lmwn', LMWN_Ref: String(r.ref || ''), Status: 'active', Note: 'นำเข้าจาก LMWN',
+      Created_By: staff.Name, Created_At: new Date(),
+    });
+    logMember(id, 'join', 0, 0, '', 'นำเข้าจาก LMWN', staff.Name);
+    var cups = Math.max(0, Math.floor(num(r.cups)));
+    if (cups) logMember(id, 'adjust', cups, 0, '', 'แก้วสะสมยกมาจาก LMWN', staff.Name);
+    if (phone) have[phone] = true;
+    added++;
+  });
+  return { added: added, skipped: skipped };
 }
