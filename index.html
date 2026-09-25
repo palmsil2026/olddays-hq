@@ -1027,12 +1027,14 @@ async function submitRegister() {
 // ══════════════════════════════════════════
 //  Shell / navigation
 // ══════════════════════════════════════════
+// ปิดเมนูเบิกซื้อไว้ก่อน (ยังไม่ได้ใช้) — โค้ด/ข้อมูลยังอยู่ครบ อยากเปิดคืนเปลี่ยนเป็น true ที่เดียว
+const FEATURE_PURCHASE = false;
 const TABS = [
   { id: 'home', ico: '🏠', label: 'หน้าแรก', screen: 'scHome' },
   { id: 'member', ico: '🎫', label: 'สมาชิก', screen: 'scMember' },
   { id: 'report', ico: '📊', label: 'รายงาน', screen: 'scReport' },
   { id: 'stock', ico: '📦', label: 'สต๊อก', screen: 'scStock' },
-  { id: 'purchase', ico: '🛒', label: 'เบิกซื้อ', screen: 'scPurchase' },
+  { id: 'purchase', ico: '🛒', label: 'เบิกซื้อ', screen: 'scPurchase', off: !FEATURE_PURCHASE },
   { id: 'com', ico: '💰', label: 'ค่าคอม', screen: 'scCom', minRole: 'manager' },
 ];
 function enterApp() {
@@ -1045,13 +1047,13 @@ function enterApp() {
   $('tbName').textContent = 'สวัสดี ' + nick;
   $('tbRole').textContent = (ROLE_TH[me.Role] || me.Role) + ' · ' + config.shopName + (previewStaff ? ' · 👀 ดูแบบพนักงาน' : '');
   const nav = $('bottomNav');
-  nav.innerHTML = '<div class="brand"><div class="logo" style="width:44px;height:44px;border-radius:14px;font-size:22px;margin:0;box-shadow:none">☕</div><div><div class="b brown" style="font-size:17px;line-height:1.1">' + esc(config.shopName) + '</div><div class="muted" style="font-size:11.5px">ระบบหลังบ้านร้าน</div></div></div>' + TABS.filter(t => !t.minRole || myLevel() >= ROLE_LEVEL[t.minRole]).map(t =>
+  nav.innerHTML = '<div class="brand"><div class="logo" style="width:44px;height:44px;border-radius:14px;font-size:22px;margin:0;box-shadow:none">☕</div><div><div class="b brown" style="font-size:17px;line-height:1.1">' + esc(config.shopName) + '</div><div class="muted" style="font-size:11.5px">ระบบหลังบ้านร้าน</div></div></div>' + TABS.filter(t => !t.off && (!t.minRole || myLevel() >= ROLE_LEVEL[t.minRole])).map(t =>
     '<button data-tab="' + t.id + '" onclick="showTab(\'' + t.id + '\')"><span class="ico">' + t.ico + '</span>' + t.label + '</button>').join('');
   nav.classList.add('show');
   showTab('home');
 }
 function showTab(tab) {
-  const t = TABS.find(x => x.id === tab); if (!t) return;
+  const t = TABS.find(x => x.id === tab && !x.off); if (!t) return;
   currentTab = tab;
   showScreen(t.screen);
   document.querySelectorAll('#bottomNav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
@@ -1127,8 +1129,8 @@ function loadHomeSide() {
 
   loadHomeMembers();
 
-  // เบิกซื้อรออนุมัติ (manager+)
-  if (isMgr()) {
+  // เบิกซื้อรออนุมัติ (manager+) — ข้ามถ้าปิดเมนูเบิกซื้อ (ประหยัดคำขอ 1 ครั้ง)
+  if (FEATURE_PURCHASE && isMgr()) {
     api({ action: 'getPurchases' }).then(d => {
       poCache = d.purchases || [];
       const pending = poCache.filter(p => p.Status === 'pending');
