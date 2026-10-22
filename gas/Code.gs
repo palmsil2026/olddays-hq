@@ -139,7 +139,7 @@ var WRITE_ACTIONS = {
   deleteStockMove: 1, createPurchase: 1, updatePurchase: 1, saveMenuItem: 1,
   importFromGmail: 1, assignCommission: 1, payCommission: 1, payAllCommission: 1, saveStaffPay: 1,
   unpayCommission: 1, disableIngredient: 1, setCategoryCommission: 1, markStockChecked: 1,
-  setStaffRole: 1, saveShift: 1,
+  setStaffRole: 1, saveShift: 1, syncShiftsFromScans: 1,
   createMember: 1, addMemberCups: 1, redeemMember: 1, renewMember: 1, updateMember: 1,
   undoMemberLog: 1, adjustCandle: 1, importMembers: 1, setIngredientMin: 1,
 };
@@ -199,6 +199,7 @@ function route(action, req) {
     case 'unpayCommission':    return actionUnpayCommission(req);
     case 'saveStaffPay':       return actionSaveStaffPay(req);
     case 'saveShift':          return actionSaveShift(req);
+    case 'syncShiftsFromScans': requireRole(req, 'manager'); return syncShiftsFromScans_();
     case 'disableIngredient':  return actionDisableIngredient(req);
     case 'setCategoryCommission': return actionSetCategoryCommission(req);
     case 'getStaffAdmin':      return actionGetStaffAdmin(req);
@@ -1600,6 +1601,7 @@ function importDrawerReports(force) {
   // (บั๊กเดิม: ดึงซ้ำ+ส่งการ์ดเข้ากลุ่มซ้ำทุก 15 นาที) force จริงต้องเป็น boolean true เท่านั้น
   force = (force === true);
   ensureSetup();
+  try { maybeSyncScansDaily_(); } catch (e) { console.log('sync scans: ' + e.message); } // 👆 วันละครั้ง ไม่ขวางการดึงยอด
   if (!force && !inImportWindow_()) return { imported: [], skipped: 'นอกช่วงดึงอัตโนมัติ (16:30–18:10) หรือยอดวันนี้เข้าแล้ว' };
   var doneIds = {};
   readRows(SHEET_TABS.IMPORT_LOG).forEach(function (r) { doneIds[r.Message_ID] = true; });
@@ -1630,6 +1632,117 @@ function importDrawerReports(force) {
     });
   });
   return { imported: results };
+}
+
+// ══════════════════════════════════════════════════════════════
+//  👆 วันเข้างานจากสแกนนิ้ว (ระบบเงินเดือนโรงน้ำ) → ใครเข้ากะ + ค่าคอมของวันนั้น
+//  คุณปาล์ม 22/10: "อัปเดตข้อมูลวันที่เนสมาทำงาน รวมเข้ากับระบบของร้านกาแฟด้วย เพื่อให้คำนวนค่าคอมได้"
+//    กติกา: "วันไหนไม่มีข้อมูลสแกนนิ้วแปลว่าเค้าไม่ได้มา ก็จะไม่มีค่าคอม"
+//  อ่านอย่างเดียว แท็บ PayrollScans ของชีตโรงน้ำ — ไม่เขียนอะไรกลับไปฝั่งโรงน้ำ
+//  Config (แท็บ Config ของร้าน):
+//    PLANT_SHEET_ID  = ชีตโรงน้ำที่มีแท็บ PayrollScans
+//    SCAN_NAME_MAP   = "ชื่อในร้าน=ชื่อในไฟล์สแกน" หลายคนคั่นด้วยจุลภาค เช่น "เนสคับ=กัณฑ์อเนก/เนส"
+//    SHIFT_SYNC_FROM = yyyy-MM-dd เริ่มซิงก์ตั้งแต่วันนี้ (ก่อนหน้านั้นจ่าย/ตัดสินไปแล้ว ไม่แตะ)
+//  กติกาการเขียน:
+//    - วันที่ไฟล์สแกนครอบคลุมแล้วเท่านั้น (ยังไม่นำเข้าไฟล์ = ไม่แตะวันนั้น)
+//    - Staff_On_Shift: ใส่/เอาออกเฉพาะคนที่อยู่ใน SCAN_NAME_MAP ตามสแกน · ชื่ออื่นที่ผู้จัดการเลือกเองคงไว้
+//    - CommissionPay: วันที่ยังไม่มีเจ้าของ + ในกะมีคนเดียว และคนนั้นมีสแกน → ใส่ให้เป็น "ยังไม่จ่าย"
+//      แถวที่มีอยู่แล้ว (จ่ายแล้ว/ระบุคนแล้ว) ไม่แตะ — ถ้าขัดกับสแกน แจ้งกลับให้ผู้จัดการดู
+// ══════════════════════════════════════════════════════════════
+var SCAN_SYNC_DEFAULTS = { SCAN_NAME_MAP: 'เนสคับ=กัณฑ์อเนก/เนส', SHIFT_SYNC_FROM: '2026-09-16' };
+
+function parseScanNameMap_(raw) {
+  var m = {};
+  String(raw || '').split(',').forEach(function (pair) {
+    var i = pair.indexOf('=');
+    if (i <= 0) return;
+    var shop = pair.slice(0, i).trim(), scan = pair.slice(i + 1).trim();
+    if (shop && scan) m[shop] = scan;
+  });
+  return m;
+}
+
+/** อ่าน PayrollScans ของโรงน้ำ → { known: {ชื่อร้าน: {date:1}}, present: {ชื่อร้าน: {date:1}} } */
+function readPlantScanDays_(map, plantId, fromDate) {
+  var byScan = {};
+  Object.keys(map).forEach(function (shop) { byScan[map[shop]] = shop; });
+  var sh = SpreadsheetApp.openById(plantId).getSheetByName('PayrollScans');
+  if (!sh) throw new Error('ไม่พบแท็บ PayrollScans ในชีตโรงน้ำ');
+  var values = sh.getDataRange().getValues();
+  var h = values[0].map(function (x) { return String(x).trim(); });
+  var cName = h.indexOf('ชื่อในไฟล์สแกน'), cDate = h.indexOf('วันที่'), cIn = h.indexOf('เข้า(นาที)'), cOut = h.indexOf('ออก(นาที)');
+  if (cName < 0 || cDate < 0 || cIn < 0 || cOut < 0) throw new Error('หัวตาราง PayrollScans ไม่ตรง');
+  var known = {}, present = {};
+  for (var i = 1; i < values.length; i++) {
+    var shop = byScan[String(values[i][cName]).trim()];
+    if (!shop) continue;
+    var d = dateKey(values[i][cDate]);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d < fromDate) continue;
+    (known[shop] = known[shop] || {})[d] = 1;
+    var vin = values[i][cIn], vout = values[i][cOut];
+    if ((vin !== '' && vin !== null) || (vout !== '' && vout !== null)) (present[shop] = present[shop] || {})[d] = 1;
+  }
+  return { known: known, present: present };
+}
+
+function syncShiftsFromScans_() {
+  var cfg = getConfig();
+  var plantId = String(cfg.PLANT_SHEET_ID || '').trim();
+  if (!plantId) throw new Error('ยังไม่ได้ตั้ง PLANT_SHEET_ID ในแท็บ Config');
+  var map = parseScanNameMap_(cfg.SCAN_NAME_MAP || SCAN_SYNC_DEFAULTS.SCAN_NAME_MAP);
+  var mapped = Object.keys(map);
+  if (!mapped.length) throw new Error('SCAN_NAME_MAP ว่าง');
+  var fromDate = String(cfg.SHIFT_SYNC_FROM || SCAN_SYNC_DEFAULTS.SHIFT_SYNC_FROM).trim();
+  var scan = readPlantScanDays_(map, plantId, fromDate);
+
+  var pays = {};
+  readRows(SHEET_TABS.COM_PAY).forEach(function (p) { pays[dateKey(p.Date)] = p; });
+  var res = { shifts: 0, pays: 0, amount: 0, conflicts: [], lastScanDate: '' };
+  mapped.forEach(function (s) {
+    Object.keys(scan.known[s] || {}).forEach(function (d) { if (d > res.lastScanDate) res.lastScanDate = d; });
+  });
+
+  readRows(SHEET_TABS.DAILY).forEach(function (r) {
+    var d = dateKey(r.Date);
+    if (d < fromDate) return;
+    var names = String(r.Staff_On_Shift || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+    var next = names.slice();
+    mapped.forEach(function (s) {
+      if (!(scan.known[s] || {})[d]) return; // ไฟล์สแกนยังไม่ครอบวันนี้ = ไม่ตัดสิน
+      var here = !!(scan.present[s] || {})[d], at = next.indexOf(s);
+      if (here && at < 0) next.push(s);
+      if (!here && at >= 0) next.splice(at, 1);
+    });
+    if (next.join(', ') !== names.join(', ')) {
+      var idx = r._rowIndex;
+      delete r._rowIndex;
+      r.Staff_On_Shift = next.join(', ');
+      updateRowObj(SHEET_TABS.DAILY, idx, r);
+      res.shifts++;
+    }
+    var p = pays[d], amount = num(r.Commission_Total);
+    if (!p) {
+      if (amount > 0 && next.length === 1 && mapped.indexOf(next[0]) >= 0 && (scan.present[next[0]] || {})[d]) {
+        appendRowObj(SHEET_TABS.COM_PAY, { Date: d, Staff_Name: next[0], Amount: amount, Status: 'unpaid',
+          Paid_At: '', Paid_By: '', Note: 'ตามสแกนนิ้ว (เงินเดือนโรงน้ำ)' });
+        res.pays++; res.amount += amount;
+      }
+    } else if (mapped.indexOf(p.Staff_Name) >= 0 && (scan.known[p.Staff_Name] || {})[d] && !(scan.present[p.Staff_Name] || {})[d]) {
+      res.conflicts.push(d + ' ค่าคอมเป็นของ ' + p.Staff_Name + ' (' + p.Status + ') แต่ไม่มีสแกนนิ้ววันนั้น');
+    }
+  });
+  return res;
+}
+
+/** เรียกจาก trigger ดึงยอด (ทุก 15 นาที) — ซิงก์จริงวันละครั้ง */
+function maybeSyncScansDaily_() {
+  var props = PropertiesService.getScriptProperties();
+  var today = dateKey(new Date());
+  if (props.getProperty('SCAN_SYNC_DAY') === today) return null;
+  if (!String(getConfig().PLANT_SHEET_ID || '').trim()) return null;
+  var r = syncShiftsFromScans_();
+  props.setProperty('SCAN_SYNC_DAY', today);
+  return r;
 }
 
 /** ดึงเลขตัวสุดท้ายของบรรทัด เช่น "| By Cash | 4 | 233.50 |" → 233.50 */
