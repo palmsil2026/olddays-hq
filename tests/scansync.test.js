@@ -10,7 +10,7 @@ function fresh(scans) {
   const pay = w.sheets.CommissionPay; const head = pay.getDataRange().getValues()[0];
   w.mkSheet('CommissionPay', [head]);
   w.sheets.Config.appendRow(['PLANT_SHEET_ID', 'plant']);
-  w.sheets.Config.appendRow(['SHIFT_SYNC_FROM', '2026-09-01']);
+  w.sheets.Config.appendRow(['SHIFT_SYNC_FROM', new Date('2026-09-01T00:00:00+07:00')]); // ชีตจริงเก็บเป็น Date
   const plantRows = [['Scan_ID', 'Period_ID', 'ชื่อในไฟล์สแกน', 'รหัสสแกน', 'วันที่', 'เข้า(นาที)', 'ออก(นาที)']].concat(scans);
   const plant = { getSheetByName: n => n === 'PayrollScans' ? { getDataRange: () => ({ getValues: () => plantRows.map(r => r.slice()) }) } : null };
   ctx.SpreadsheetApp.openById = id => { if (id !== 'plant') throw new Error('wrong id ' + id); return plant; };
