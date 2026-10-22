@@ -1808,6 +1808,8 @@ function renderCom() {
     '<span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#FFE7B0;margin-right:4px"></i>ระบุคนแล้ว รอจ่าย ' + money0(amt - paid - unAmt) + '</span>' +
     '<span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:rgba(255,247,234,.3);margin-right:4px"></i>ยังไม่ระบุคน ' + money0(unAmt) + '</span></div></div>';
 
+  html += '<button class="btn sm ghost" style="margin:8px 0 2px" onclick="syncScans(this)">👆 ดึงวันเข้างานจากสแกนนิ้ว</button>' +
+    '<div class="muted small">ใส่คนเข้ากะ + ค่าคอม (ยังไม่จ่าย) ให้วันที่มีสแกนนิ้ว · วันไม่มีสแกน = ไม่ได้ค่าคอม · ระบบดึงเองวันละครั้งด้วย</div>';
   html += '<div class="sec-h"><h2>👤 สรุปต่อคน</h2></div>';
   const names = Object.keys(per);
   html += names.length ? names.map(name => {
@@ -1837,6 +1839,15 @@ function renderCom() {
       '<div class="sub">👥 ใครเข้ากะ (เลือกได้หลายคน)</div>' + shiftChips + '<div class="sub">💰 ค่าคอมของ</div>' + comLine + '</div>';
   }).join('') + '</div></div></div>';
   $('comBody').innerHTML = html;
+}
+async function syncScans(btn) {
+  btn.disabled = true; btn.textContent = '⏳ กำลังดึงสแกนนิ้ว…';
+  try {
+    const r = await api({ action: 'syncShiftsFromScans' });
+    showToast('👆 ' + (r.shifts || r.pays ? 'อัปเดตเข้ากะ ' + r.shifts + ' วัน · ใส่ค่าคอม ' + r.pays + ' วัน (' + money0(r.amount) + ' ฿)' : 'ตรงกับสแกนนิ้วอยู่แล้ว') +
+      (r.lastScanDate ? ' · สแกนถึง ' + thaiDateShort(r.lastScanDate) : '') + ((r.conflicts || []).length ? ' · ⚠️ ' + r.conflicts.join(' / ') : ''), 6000);
+    loadCom();
+  } catch (e) { showToast('ดึงสแกนนิ้วไม่สำเร็จ: ' + e.message, 5000); btn.disabled = false; btn.textContent = '👆 ดึงวันเข้างานจากสแกนนิ้ว'; }
 }
 const shiftSaveTimers = {};
 function toggleShift(date, chipEl) {
