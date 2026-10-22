@@ -1692,7 +1692,8 @@ function syncShiftsFromScans_() {
   var map = parseScanNameMap_(cfg.SCAN_NAME_MAP || SCAN_SYNC_DEFAULTS.SCAN_NAME_MAP);
   var mapped = Object.keys(map);
   if (!mapped.length) throw new Error('SCAN_NAME_MAP ว่าง');
-  var fromDate = String(cfg.SHIFT_SYNC_FROM || SCAN_SYNC_DEFAULTS.SHIFT_SYNC_FROM).trim();
+  // Sheets แปลง "2026-09-16" เป็น Date เอง — ต้องผ่าน dateKey ก่อนเทียบ
+  var fromDate = dateKey(cfg.SHIFT_SYNC_FROM || SCAN_SYNC_DEFAULTS.SHIFT_SYNC_FROM).trim();
   var scan = readPlantScanDays_(map, plantId, fromDate);
 
   var pays = {};
