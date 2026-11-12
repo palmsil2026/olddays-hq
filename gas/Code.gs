@@ -1203,17 +1203,34 @@ function buildDailyFlex(record, categories, premiumItems, config) {
 }
 
 /**
+ * Config `MONEY_DM_SKIP` = รายชื่อคนที่ "ไม่ต้องการ" DM ยอดเงินรายวัน
+ * ใส่ได้ทั้ง ชื่อเล่น / ชื่อ (ตามแท็บ Staff) / LINE_User_ID คั่นด้วย , (ไม่ใส่ = ส่งผู้บริหารทุกคนเหมือนเดิม)
+ */
+function moneyDmSkipped_(staff, config) {
+  var raw = String((config && config.MONEY_DM_SKIP) || '').trim();
+  if (!raw) return false;
+  var list = raw.split(/[,\n]/).map(function (x) { return x.trim().toLowerCase(); })
+    .filter(function (x) { return x; });
+  return [staff.Nickname, staff.Name, staff.LINE_User_ID].some(function (v) {
+    var k = String(v || '').trim().toLowerCase();
+    return k && list.indexOf(k) !== -1;
+  });
+}
+
+/**
  * 💰 สรุป "ตัวเงิน" ส่งเข้า DM ของผู้บริหาร/เจ้าของเท่านั้น
  * (การ์ดในกลุ่มไม่มีเงินแล้ว — ฝั่งผู้บริหารยังต้องเห็นยอดทุกวันโดยไม่ต้องเปิดแอป)
+ * ใครไม่อยากได้ → ใส่ชื่อใน Config `MONEY_DM_SKIP` (ดู moneyDmSkipped_)
  */
 function pushOwnerMoneySummary(record, config) {
   var cred = getLineCredentials();
   if (!cred.token) return { pushed: false, error: 'ไม่มี LINE token' };
   var bosses = readRows(SHEET_TABS.STAFF).filter(function (s) {
     return isTrue(s.Active) && s.LINE_User_ID &&
-      (ROLE_LEVEL[s.Role] || 0) >= ROLE_LEVEL.manager;
+      (ROLE_LEVEL[s.Role] || 0) >= ROLE_LEVEL.manager &&
+      !moneyDmSkipped_(s, config);
   });
-  if (!bosses.length) return { pushed: false, error: 'ไม่มีผู้บริหารในทะเบียน' };
+  if (!bosses.length) return { pushed: false, error: 'ไม่มีผู้บริหารที่รับ DM ยอดเงิน' };
 
   var drawer = String(record.Note || '').match(/ลิ้นชัก: [^|]+/);
   var text = '💰 ยอดขาย ' + (config.SHOP_NAME || 'Old Days') + ' ' + thaiDate(dateKey(record.Date)) + '\n' +
